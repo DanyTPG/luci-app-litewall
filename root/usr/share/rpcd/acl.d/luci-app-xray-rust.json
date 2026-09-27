@@ -9,6 +9,7 @@
 				"/usr/share/xray-rust/test.sh": [ "exec" ]
 			},
 			"ubus": {
+				"file": [ "exec" ],
 				"service": [ "list" ]
 			}
 		},
