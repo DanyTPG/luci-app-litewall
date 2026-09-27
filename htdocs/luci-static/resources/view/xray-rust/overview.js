@@ -182,7 +182,7 @@ return view.extend({
 		// Node Diagnostics & Latency Tests (Ping, TCPing, URL Test)
 		o = s.option(form.DummyValue, '_test_actions', _('Latency Tests'));
 		o.modalonly = false;
-		o.renderWidget = function(section_id, option_index, cfgvalue) {
+		o.textvalue = function(section_id) {
 			var node = uci.get('xray-rust', section_id);
 			if (!node || !node.server) return E('em', {}, '-');
 			var server = node.server;
@@ -221,6 +221,8 @@ return view.extend({
 
 			return E('div', { 'style': 'white-space:nowrap;' }, [ pingBtn, tcpBtn, urlBtn, resultSpan ]);
 		};
+		o.cfgvalue = o.textvalue;
+		o.renderWidget = o.textvalue;
 
 		// Modal options for editing node details
 		o = s.option(form.TextValue, 'raw_link', _('Or Paste Share Link (vless://...)'));
