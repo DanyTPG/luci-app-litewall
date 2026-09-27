@@ -1,0 +1,15 @@
+{
+	"admin/services/xray-rust": {
+		"title": "Xray Rust",
+		"order": 95,
+		"action": {
+			"type": "view",
+			"path": "xray-rust/overview"
+		},
+		"depends": {
+			"acl": [
+				"luci-app-xray-rust"
+			]
+		}
+	}
+}

@@ -1,0 +1,17 @@
+{
+	"luci-app-xray-rust": {
+		"description": "Grant UCI and service access for luci-app-xray-rust",
+		"read": {
+			"uci": [ "xray-rust" ],
+			"file": {
+				"/var/etc/xray-rust/config.json": [ "read" ]
+			},
+			"ubus": {
+				"service": [ "list" ]
+			}
+		},
+		"write": {
+			"uci": [ "xray-rust" ]
+		}
+	}
+}

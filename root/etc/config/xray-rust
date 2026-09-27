@@ -1,0 +1,6 @@
+config xray-rust 'main'
+	option enabled '1'
+	option config_type 'link'
+	option socks_port '10808'
+	option share_link 'vless://00000000-0000-0000-0000-000000000000@example.com:443?encryption=none&security=tls&sni=example.com&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=example.com&path=%2Fapi%2F1&mode=stream-up#Example-Node'
+	option custom_json ''
