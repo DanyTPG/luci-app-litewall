@@ -60,9 +60,9 @@ case "$cmd" in
       sec=$(echo "$res" | cut -d: -f2)
       if [ "$code" = "200" ] || [ "$code" = "204" ]; then
         ms=$(awk -v s="$sec" 'BEGIN { printf "%.0f", s * 1000 }')
-        echo "${code} (${ms} ms)"
+        echo "${ms} ms"
       else
-        echo "fail (${code})"
+        echo "timeout"
       fi
     else
       # Test standalone node via temporary instance
@@ -70,7 +70,7 @@ case "$cmd" in
       tmp_cfg="/tmp/urltest_${node_id}.json"
       lua "$CONFIG_GEN" "$tmp_cfg" "$node_id" "$tmp_port" >/dev/null 2>&1
       if [ ! -f "$tmp_cfg" ]; then
-        echo "config error"
+        echo "timeout"
         exit 1
       fi
 
@@ -86,9 +86,9 @@ case "$cmd" in
       sec=$(echo "$res" | cut -d: -f2)
       if [ "$code" = "200" ] || [ "$code" = "204" ]; then
         ms=$(awk -v s="$sec" 'BEGIN { printf "%.0f", s * 1000 }')
-        echo "${code} (${ms} ms)"
+        echo "${ms} ms"
       else
-        echo "fail (${code})"
+        echo "timeout"
       fi
     fi
     ;;

@@ -14,20 +14,60 @@ var callServiceList = rpc.declare({
 	expect: { 'xray-rust': {} }
 });
 
-function runTest(cmd, param1, param2, outputEl) {
-	dom.content(outputEl, E('span', { 'style': 'color:#3498db;' }, _('testing...')));
-	var args = [cmd, param1];
-	if (param2) args.push(param2);
-	return fs.exec('/usr/share/xray-rust/test.sh', args).then(function(res) {
-		var out = (res.stdout || '').trim();
-		if (out.indexOf('ms') !== -1 || out.indexOf('200') !== -1 || out.indexOf('204') !== -1) {
-			dom.content(outputEl, E('span', { 'style': 'color:#2ecc71;font-weight:bold;' }, out));
-		} else {
-			dom.content(outputEl, E('span', { 'style': 'color:#e74c3c;' }, out || 'fail'));
+function createTestLink(type, section_id) {
+	var node = uci.get('xray-rust', section_id);
+	if (!node || !node.server) {
+		return E('span', { 'style': 'color:#888;' }, '---');
+	}
+
+	var server = node.server;
+	var port = node.port || '443';
+
+	return E('a', {
+		'href': 'javascript:void(0)',
+		'style': 'color:#33a3dc;text-decoration:none;cursor:pointer;font-weight:bold;white-space:nowrap;',
+		'click': function(ev) {
+			ev.preventDefault();
+			if (this.getAttribute('data-busy') === '1') return;
+			this.setAttribute('data-busy', '1');
+			this.style.color = '#aaa';
+			this.innerText = _('Checking...');
+
+			var args = [type];
+			if (type === 'ping') {
+				args.push(server);
+			} else if (type === 'tcping') {
+				args.push(server, port);
+			} else if (type === 'urltest') {
+				args.push(section_id);
+			}
+
+			var self = this;
+			fs.exec('/usr/share/xray-rust/test.sh', args).then(function(res) {
+				self.setAttribute('data-busy', '0');
+				var out = (res.stdout || '').trim();
+				var ms = parseFloat(out);
+				if (!out || out.indexOf('timeout') !== -1 || out.indexOf('fail') !== -1 || out.indexOf('error') !== -1 || isNaN(ms) || ms < 0) {
+					self.innerText = _('Timeout');
+					self.style.color = '#e74c3c';
+				} else {
+					var rounded = Math.round(ms);
+					self.innerText = rounded + ' ms';
+					if (rounded < 150) {
+						self.style.color = '#2ecc71';
+					} else if (rounded < 500) {
+						self.style.color = '#fb9a05';
+					} else {
+						self.style.color = '#e74c3c';
+					}
+				}
+			}).catch(function() {
+				self.setAttribute('data-busy', '0');
+				self.innerText = _('Timeout');
+				self.style.color = '#e74c3c';
+			});
 		}
-	}).catch(function(err) {
-		dom.content(outputEl, E('span', { 'style': 'color:#e74c3c;' }, err.message || 'error'));
-	});
+	}, _('Test'));
 }
 
 return view.extend({
@@ -179,50 +219,27 @@ return view.extend({
 		o.value('none', 'None');
 		o.default = 'tls';
 
-		// Node Diagnostics & Latency Tests (Ping, TCPing, URL Test)
-		o = s.option(form.DummyValue, '_test_actions', _('Latency Tests'));
+		// Node Diagnostics & Latency Tests (Ping, TCPing, URL Test) - Passwall2 Style
+		o = s.option(form.DummyValue, '_ping', _('Ping'));
 		o.modalonly = false;
 		o.textvalue = function(section_id) {
-			var node = uci.get('xray-rust', section_id);
-			if (!node || !node.server) return E('em', {}, '-');
-			var server = node.server;
-			var port = node.port || '443';
-
-			var resultSpan = E('span', {
-				'style': 'margin-left:6px;font-family:monospace;font-size:0.95em;'
-			});
-
-			var pingBtn = E('button', {
-				'class': 'btn cbi-button cbi-button-action',
-				'type': 'button',
-				'style': 'padding:2px 6px;margin-right:4px;',
-				'click': ui.createHandlerFn(this, function() {
-					runTest('ping', server, null, resultSpan);
-				})
-			}, _('Ping'));
-
-			var tcpBtn = E('button', {
-				'class': 'btn cbi-button cbi-button-action',
-				'type': 'button',
-				'style': 'padding:2px 6px;margin-right:4px;',
-				'click': ui.createHandlerFn(this, function() {
-					runTest('tcping', server, port, resultSpan);
-				})
-			}, _('TCPing'));
-
-			var urlBtn = E('button', {
-				'class': 'btn cbi-button cbi-button-positive',
-				'type': 'button',
-				'style': 'padding:2px 6px;margin-right:4px;',
-				'click': ui.createHandlerFn(this, function() {
-					runTest('urltest', section_id, null, resultSpan);
-				})
-			}, _('URL Test'));
-
-			return E('div', { 'style': 'white-space:nowrap;' }, [ pingBtn, tcpBtn, urlBtn, resultSpan ]);
+			return createTestLink('ping', section_id);
 		};
 		o.cfgvalue = o.textvalue;
-		o.renderWidget = o.textvalue;
+
+		o = s.option(form.DummyValue, '_tcping', _('TCPing'));
+		o.modalonly = false;
+		o.textvalue = function(section_id) {
+			return createTestLink('tcping', section_id);
+		};
+		o.cfgvalue = o.textvalue;
+
+		o = s.option(form.DummyValue, '_urltest', _('URL Test'));
+		o.modalonly = false;
+		o.textvalue = function(section_id) {
+			return createTestLink('urltest', section_id);
+		};
+		o.cfgvalue = o.textvalue;
 
 		// Modal options for editing node details
 		o = s.option(form.TextValue, 'raw_link', _('Or Paste Share Link (vless://...)'));
@@ -288,9 +305,6 @@ return view.extend({
 		o = s.option(form.Value, 'port', _('Port / Range'));
 		o.modalonly = true;
 		o.placeholder = '80,443';
-
-		// Attach global test runner helper
-		window._runXrayTest = runTest;
 
 		return m.render();
 	}
