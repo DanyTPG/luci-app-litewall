@@ -2,9 +2,11 @@
 	"luci-app-xray-rust": {
 		"description": "Grant UCI and service access for luci-app-xray-rust",
 		"read": {
+			"cgi-io": [ "exec" ],
 			"uci": [ "xray-rust" ],
 			"file": {
-				"/var/etc/xray-rust/config.json": [ "read" ]
+				"/var/etc/xray-rust/config.json": [ "read" ],
+				"/usr/share/xray-rust/test.sh": [ "exec" ]
 			},
 			"ubus": {
 				"service": [ "list" ]

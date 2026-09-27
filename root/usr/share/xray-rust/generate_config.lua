@@ -86,20 +86,11 @@ local function parse_vless(url, socks_port)
     }
 end
 
-local socks_port = tonumber(uci:get("xray-rust", "main", "socks_port")) or 10808
-local out_file = arg[1] or "/var/etc/xray-rust/config.json"
-local conf_dir = "/var/etc/xray-rust"
-
-os.execute("mkdir -p " .. conf_dir)
-
-local node_data = nil
-local active_node = uci:get("xray-rust", "main", "active_node")
-local node_sec = active_node and uci:get_all("xray-rust", active_node)
-
-if node_sec then
-    local raw_link = node_sec.raw_link
-    if raw_link and raw_link ~= "" then
-        node_data = parse_vless(raw_link, socks_port)
+local function get_node_data(node_id, socks_port)
+    local node_sec = uci:get_all("xray-rust", node_id)
+    if not node_sec then return nil end
+    if node_sec.raw_link and node_sec.raw_link ~= "" then
+        return parse_vless(node_sec.raw_link, socks_port)
     else
         local server = node_sec.server
         local port = tonumber(node_sec.port) or 443
@@ -125,7 +116,7 @@ if node_sec then
         if transport == "xhttp" then
             stream_settings.xhttpSettings = { host = sni, path = path, mode = mode }
         end
-        node_data = {
+        return {
             address = server,
             port = port,
             uuid = uuid,
@@ -135,26 +126,115 @@ if node_sec then
     end
 end
 
-if not node_data then
-    local link = uci:get("xray-rust", "main", "share_link") or ""
-    if link ~= "" then
-        node_data = parse_vless(link, socks_port)
+local function build_outbound(tag, node_data)
+    return {
+        tag = tag,
+        protocol = "vless",
+        settings = {
+            vnext = {
+                {
+                    address = node_data.address,
+                    port = node_data.port,
+                    users = {
+                        {
+                            id = node_data.uuid,
+                            encryption = node_data.encryption or "none",
+                            flow = node_data.flow or ""
+                        }
+                    }
+                }
+            }
+        },
+        streamSettings = node_data.stream_settings
+    }
+end
+
+local socks_port = tonumber(arg[3]) or tonumber(uci:get("xray-rust", "main", "socks_port")) or 10808
+local out_file = arg[1] or "/var/etc/xray-rust/config.json"
+local single_node_id = arg[2]
+local conf_dir = "/var/etc/xray-rust"
+
+os.execute("mkdir -p " .. conf_dir)
+
+-- If running single node test
+if single_node_id and single_node_id ~= "" then
+    local nd = get_node_data(single_node_id, socks_port)
+    if not nd then
+        io.stderr:write("Node " .. single_node_id .. " not found\n")
+        os.exit(1)
+    end
+    local test_cfg = {
+        inbounds = {
+            {
+                tag = "socks-in",
+                protocol = "socks",
+                listen = "127.0.0.1",
+                port = socks_port,
+                settings = { auth = "noauth", udp = true }
+            }
+        },
+        outbounds = {
+            build_outbound("proxy", nd),
+            { tag = "direct", protocol = "freedom" }
+        }
+    }
+    local f = io.open(out_file, "w")
+    if f then
+        f:write(json.stringify(test_cfg, true))
+        f:close()
+        os.exit(0)
+    else
+        os.exit(1)
     end
 end
 
-if not node_data then
-    io.stderr:write("No valid node configured\n")
+local active_node = uci:get("xray-rust", "main", "active_node") or "node1"
+local active_node_data = get_node_data(active_node, socks_port)
+
+if not active_node_data then
+    local link = uci:get("xray-rust", "main", "share_link") or ""
+    if link ~= "" then
+        active_node_data = parse_vless(link, socks_port)
+    end
+end
+
+if not active_node_data then
+    io.stderr:write("No valid active node configured\n")
     os.exit(1)
 end
 
+-- Collect all rule groups and custom nodes
+local needed_nodes = {}
+needed_nodes[active_node] = active_node_data
+
+uci:foreach("xray-rust", "rule_group", function(rg)
+    if rg.enabled == "1" and rg.target_node and rg.target_node ~= "_direct" and rg.target_node ~= "_default" then
+        if not needed_nodes[rg.target_node] then
+            local nd = get_node_data(rg.target_node, socks_port)
+            if nd then needed_nodes[rg.target_node] = nd end
+        end
+    end
+end)
+
 -- Record server host/ip to bypass loop in nftables
-if node_data.address then
-    local f_ip = io.open(conf_dir .. "/server_ips", "w")
-    if f_ip then
-        f_ip:write(node_data.address .. "\n")
-        f_ip:close()
+local f_ip = io.open(conf_dir .. "/server_ips", "w")
+if f_ip then
+    for _, nd in pairs(needed_nodes) do
+        if nd.address then f_ip:write(nd.address .. "\n") end
+    end
+    f_ip:close()
+end
+
+-- Build outbounds
+local outbounds = {
+    build_outbound("proxy", active_node_data)
+}
+for nid, nd in pairs(needed_nodes) do
+    if nid ~= active_node then
+        table.insert(outbounds, build_outbound(nid, nd))
     end
 end
+table.insert(outbounds, { tag = "direct", protocol = "freedom" })
 
 -- Build routing rules
 local routing_rules = {
@@ -165,20 +245,51 @@ local routing_rules = {
     }
 }
 
-local routing_mode = uci:get("xray-rust", "main", "routing_mode") or "bypass_lan"
-if routing_mode == "bypass_iran" then
-    table.insert(routing_rules, {
-        type = "field",
-        domain = { "geosite:ir" },
-        outboundTag = "direct"
-    })
-    table.insert(routing_rules, {
-        type = "field",
-        ip = { "geoip:ir" },
-        outboundTag = "direct"
-    })
-end
+-- Process Rule Groups
+uci:foreach("xray-rust", "rule_group", function(rg)
+    if rg.enabled == "1" then
+        local target_tag = "proxy"
+        if rg.target_node == "_direct" then
+            target_tag = "direct"
+        elseif rg.target_node and rg.target_node ~= "_default" and needed_nodes[rg.target_node] then
+            target_tag = rg.target_node
+        end
 
+        local domains = rg.domain_list
+        if domains and type(domains) == "string" then domains = { domains } end
+        local ips = rg.ip_list
+        if ips and type(ips) == "string" then ips = { ips } end
+
+        local rule = {
+            type = "field",
+            outboundTag = target_tag
+        }
+        local has_criteria = false
+
+        if domains and #domains > 0 then
+            rule.domain = domains
+            has_criteria = true
+        end
+        if ips and #ips > 0 then
+            rule.ip = ips
+            has_criteria = true
+        end
+        if rg.network and rg.network ~= "" and rg.network ~= "tcp,udp" then
+            rule.network = rg.network
+            has_criteria = true
+        end
+        if rg.port and rg.port ~= "" then
+            rule.port = rg.port
+            has_criteria = true
+        end
+
+        if has_criteria then
+            table.insert(routing_rules, rule)
+        end
+    end
+end)
+
+-- Custom domain and ip overrides
 local direct_domains = uci:get("xray-rust", "main", "direct_domain")
 if direct_domains then
     if type(direct_domains) == "string" then direct_domains = { direct_domains } end
@@ -213,32 +324,7 @@ local config = {
             settings = { auth = "noauth", udp = true }
         }
     },
-    outbounds = {
-        {
-            tag = "proxy",
-            protocol = "vless",
-            settings = {
-                vnext = {
-                    {
-                        address = node_data.address,
-                        port = node_data.port,
-                        users = {
-                            {
-                                id = node_data.uuid,
-                                encryption = node_data.encryption or "none",
-                                flow = node_data.flow or ""
-                            }
-                        }
-                    }
-                }
-            },
-            streamSettings = node_data.stream_settings
-        },
-        {
-            tag = "direct",
-            protocol = "freedom"
-        }
-    },
+    outbounds = outbounds,
     routing = {
         domainStrategy = "AsIs",
         rules = routing_rules

@@ -3,6 +3,7 @@
 'require fs';
 'require rpc';
 'require uci';
+'require ui';
 'require view';
 
 var callServiceList = rpc.declare({
@@ -11,6 +12,22 @@ var callServiceList = rpc.declare({
 	params: [ 'name' ],
 	expect: { 'xray-rust': {} }
 });
+
+function runTest(cmd, param1, param2, outputEl) {
+	outputEl.innerHTML = '<span style="color:#3498db;">testing...</span>';
+	var args = [cmd, param1];
+	if (param2) args.push(param2);
+	return fs.exec('/usr/share/xray-rust/test.sh', args).then(function(res) {
+		var out = (res.stdout || '').trim();
+		if (out.indexOf('ms') !== -1 || out.indexOf('200') !== -1 || out.indexOf('204') !== -1) {
+			outputEl.innerHTML = '<span style="color:#2ecc71;font-weight:bold;">' + out + '</span>';
+		} else {
+			outputEl.innerHTML = '<span style="color:#e74c3c;">' + (out || 'fail') + '</span>';
+		}
+	}).catch(function(err) {
+		outputEl.innerHTML = '<span style="color:#e74c3c;">' + (err.message || 'error') + '</span>';
+	});
+}
 
 return view.extend({
 	load: function() {
@@ -37,7 +54,7 @@ return view.extend({
 		var m, s, o;
 
 		m = new form.Map('xray-rust', _('Xray Rust Client'),
-			_('High-performance, ultra-low-memory (6.5 MB RSS) Xray proxy client with transparent routing for OpenWrt.'));
+			_('High-performance, ultra-low-memory (6.5 MB RSS) Xray proxy client with transparent routing, node diagnostics, and shunt rules.'));
 
 		// 1. Status Section
 		s = m.section(form.NamedSection, 'main', 'main', _('System & Service Status'));
@@ -71,7 +88,8 @@ return view.extend({
 		// 2. Main Config with Tabs
 		s = m.section(form.NamedSection, 'main', 'main', _('Settings'));
 		s.tab('basic', _('Basic Settings'));
-		s.tab('routing', _('Routing & Shunting'));
+		s.tab('rules', _('Rule Groups (Shunt)'));
+		s.tab('custom_override', _('Custom Whitelist / Overrides'));
 
 		// --- Basic Settings Tab ---
 		o = s.taboption('basic', form.Flag, 'enabled', _('Enable Service'));
@@ -83,7 +101,7 @@ return view.extend({
 		o.value('socks', _('SOCKS5 Only (Standalone local proxy)'));
 		o.default = 'redirect';
 
-		o = s.taboption('basic', form.ListValue, 'active_node', _('Active Node'));
+		o = s.taboption('basic', form.ListValue, 'active_node', _('Default Active Node'));
 		var nodes = uci.sections('xray-rust', 'node');
 		nodes.forEach(function(node) {
 			var label = (node.remark || node['.name']) + ' (' + (node.server || 'unknown') + ':' + (node.port || '443') + ')';
@@ -112,25 +130,20 @@ return view.extend({
 		o.default = '1';
 		o.depends('mode', 'redirect');
 
-		// --- Routing & Shunting Tab ---
-		o = s.taboption('routing', form.ListValue, 'routing_mode', _('Routing Mode'));
-		o.value('bypass_lan', _('Bypass LAN & Private IPs (Global Proxy)'));
-		o.value('bypass_iran', _('Bypass LAN + Iran Domestic Domains/IPs (geoip:ir / geosite:ir)'));
-		o.default = 'bypass_lan';
-
-		o = s.taboption('routing', form.DynamicList, 'direct_domain', _('Direct Domains (Whitelist)'));
+		// --- Custom Overrides Tab ---
+		o = s.taboption('custom_override', form.DynamicList, 'direct_domain', _('Direct Domains (Always Bypass)'));
 		o.description = _('Domains that directly connect without going through the proxy.');
 		o.placeholder = 'example.ir';
 
-		o = s.taboption('routing', form.DynamicList, 'proxy_domain', _('Proxy Domains (Forced)'));
+		o = s.taboption('custom_override', form.DynamicList, 'proxy_domain', _('Proxy Domains (Always Proxy)'));
 		o.description = _('Domains always routed through the proxy.');
 		o.placeholder = 'google.com';
 
-		o = s.taboption('routing', form.DynamicList, 'direct_ip', _('Direct CIDRs / IPs'));
+		o = s.taboption('custom_override', form.DynamicList, 'direct_ip', _('Direct CIDRs / IPs'));
 		o.description = _('IP CIDRs to bypass (e.g. 10.0.0.0/8).');
 		o.placeholder = '192.168.0.0/16';
 
-		// 3. Node Management Section
+		// 3. Node Management Section with Tests
 		s = m.section(form.GridSection, 'node', _('Node Management'));
 		s.addremove = true;
 		s.anonymous = false;
@@ -165,6 +178,25 @@ return view.extend({
 		o.value('none', 'None');
 		o.default = 'tls';
 
+		// Node Diagnostics & Latency Tests (Ping, TCPing, URL Test)
+		o = s.option(form.DummyValue, '_test_actions', _('Latency Tests'));
+		o.rawhtml = true;
+		o.cfgvalue = function(section_id) {
+			var node = uci.get('xray-rust', section_id);
+			if (!node || !node.server) return '<em>-</em>';
+			var server = node.server;
+			var port = node.port || '443';
+			var outId = 'res_' + section_id;
+
+			var pingBtn = '<button type="button" class="btn cbi-button-action" style="padding:2px 6px;margin-right:4px;" onclick="var el=document.getElementById(\'' + outId + '\'); window._runXrayTest(\'ping\',\'' + server + '\',null,el);">' + _('Ping') + '</button>';
+			var tcpBtn = '<button type="button" class="btn cbi-button-action" style="padding:2px 6px;margin-right:4px;" onclick="var el=document.getElementById(\'' + outId + '\'); window._runXrayTest(\'tcping\',\'' + server + '\',\'' + port + '\',el);">' + _('TCPing') + '</button>';
+			var urlBtn = '<button type="button" class="btn cbi-button-positive" style="padding:2px 6px;margin-right:4px;" onclick="var el=document.getElementById(\'' + outId + '\'); window._runXrayTest(\'urltest\',\'' + section_id + '\',null,el);">' + _('URL Test') + '</button>';
+			var resultSpan = '<span id="' + outId + '" style="margin-left:6px;font-family:monospace;font-size:0.95em;"></span>';
+
+			return '<div style="white-space:nowrap;">' + pingBtn + tcpBtn + urlBtn + resultSpan + '</div>';
+		};
+
+		// Modal options for editing node details
 		o = s.option(form.TextValue, 'raw_link', _('Or Paste Share Link (vless://...)'));
 		o.modalonly = true;
 		o.rows = 4;
@@ -185,6 +217,52 @@ return view.extend({
 		o = s.option(form.Value, 'fp', _('Fingerprint'));
 		o.modalonly = true;
 		o.default = 'chrome';
+
+		// 4. Routing Rule Groups (Passwall2 Style Shunting)
+		s = m.section(form.GridSection, 'rule_group', _('Routing Rule Groups (Shunting)'),
+			_('Configure rule groups and assign specific outbound nodes or direct bypass to each group.'));
+		s.addremove = true;
+		s.anonymous = false;
+		s.sortable = true;
+
+		o = s.option(form.Flag, 'enabled', _('Enable'));
+		o.default = '1';
+		o.rmempty = false;
+
+		o = s.option(form.Value, 'remarks', _('Group Name / Remark'));
+		o.placeholder = 'My Rule Group';
+
+		o = s.option(form.ListValue, 'target_node', _('Target Node'));
+		o.value('_direct', _('Direct (Bypass Proxy)'));
+		o.value('_default', _('Default Active Node'));
+		nodes.forEach(function(node) {
+			var label = (node.remark || node['.name']);
+			o.value(node['.name'], _('Node: ') + label);
+		});
+		o.default = '_default';
+
+		o = s.option(form.ListValue, 'network', _('Network'));
+		o.value('tcp,udp', 'TCP + UDP');
+		o.value('tcp', 'TCP Only');
+		o.value('udp', 'UDP Only');
+		o.default = 'tcp,udp';
+
+		o = s.option(form.DynamicList, 'domain_list', _('Domain Matchers'));
+		o.modalonly = true;
+		o.placeholder = 'geosite:ir';
+		o.description = _('Domains, geosite rules (e.g. geosite:ir, geosite:youtube), or regex (e.g. regexp:.*google.*).');
+
+		o = s.option(form.DynamicList, 'ip_list', _('IP Matchers'));
+		o.modalonly = true;
+		o.placeholder = 'geoip:ir';
+		o.description = _('IP CIDRs (e.g. 1.2.3.0/24) or geoip rules (e.g. geoip:ir, geoip:telegram).');
+
+		o = s.option(form.Value, 'port', _('Port / Range'));
+		o.modalonly = true;
+		o.placeholder = '80,443';
+
+		// Attach global test runner helper
+		window._runXrayTest = runTest;
 
 		return m.render();
 	}
