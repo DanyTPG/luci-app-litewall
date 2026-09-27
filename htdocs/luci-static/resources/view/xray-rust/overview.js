@@ -1,4 +1,5 @@
 'use strict';
+'require dom';
 'require form';
 'require fs';
 'require rpc';
@@ -14,18 +15,18 @@ var callServiceList = rpc.declare({
 });
 
 function runTest(cmd, param1, param2, outputEl) {
-	outputEl.innerHTML = '<span style="color:#3498db;">testing...</span>';
+	dom.content(outputEl, E('span', { 'style': 'color:#3498db;' }, _('testing...')));
 	var args = [cmd, param1];
 	if (param2) args.push(param2);
 	return fs.exec('/usr/share/xray-rust/test.sh', args).then(function(res) {
 		var out = (res.stdout || '').trim();
 		if (out.indexOf('ms') !== -1 || out.indexOf('200') !== -1 || out.indexOf('204') !== -1) {
-			outputEl.innerHTML = '<span style="color:#2ecc71;font-weight:bold;">' + out + '</span>';
+			dom.content(outputEl, E('span', { 'style': 'color:#2ecc71;font-weight:bold;' }, out));
 		} else {
-			outputEl.innerHTML = '<span style="color:#e74c3c;">' + (out || 'fail') + '</span>';
+			dom.content(outputEl, E('span', { 'style': 'color:#e74c3c;' }, out || 'fail'));
 		}
 	}).catch(function(err) {
-		outputEl.innerHTML = '<span style="color:#e74c3c;">' + (err.message || 'error') + '</span>';
+		dom.content(outputEl, E('span', { 'style': 'color:#e74c3c;' }, err.message || 'error'));
 	});
 }
 
@@ -180,20 +181,45 @@ return view.extend({
 
 		// Node Diagnostics & Latency Tests (Ping, TCPing, URL Test)
 		o = s.option(form.DummyValue, '_test_actions', _('Latency Tests'));
-		o.rawhtml = true;
-		o.cfgvalue = function(section_id) {
+		o.modalonly = false;
+		o.renderWidget = function(section_id, option_index, cfgvalue) {
 			var node = uci.get('xray-rust', section_id);
-			if (!node || !node.server) return '<em>-</em>';
+			if (!node || !node.server) return E('em', {}, '-');
 			var server = node.server;
 			var port = node.port || '443';
-			var outId = 'res_' + section_id;
 
-			var pingBtn = '<button type="button" class="btn cbi-button-action" style="padding:2px 6px;margin-right:4px;" onclick="var el=document.getElementById(\'' + outId + '\'); window._runXrayTest(\'ping\',\'' + server + '\',null,el);">' + _('Ping') + '</button>';
-			var tcpBtn = '<button type="button" class="btn cbi-button-action" style="padding:2px 6px;margin-right:4px;" onclick="var el=document.getElementById(\'' + outId + '\'); window._runXrayTest(\'tcping\',\'' + server + '\',\'' + port + '\',el);">' + _('TCPing') + '</button>';
-			var urlBtn = '<button type="button" class="btn cbi-button-positive" style="padding:2px 6px;margin-right:4px;" onclick="var el=document.getElementById(\'' + outId + '\'); window._runXrayTest(\'urltest\',\'' + section_id + '\',null,el);">' + _('URL Test') + '</button>';
-			var resultSpan = '<span id="' + outId + '" style="margin-left:6px;font-family:monospace;font-size:0.95em;"></span>';
+			var resultSpan = E('span', {
+				'style': 'margin-left:6px;font-family:monospace;font-size:0.95em;'
+			});
 
-			return '<div style="white-space:nowrap;">' + pingBtn + tcpBtn + urlBtn + resultSpan + '</div>';
+			var pingBtn = E('button', {
+				'class': 'btn cbi-button cbi-button-action',
+				'type': 'button',
+				'style': 'padding:2px 6px;margin-right:4px;',
+				'click': ui.createHandlerFn(this, function() {
+					runTest('ping', server, null, resultSpan);
+				})
+			}, _('Ping'));
+
+			var tcpBtn = E('button', {
+				'class': 'btn cbi-button cbi-button-action',
+				'type': 'button',
+				'style': 'padding:2px 6px;margin-right:4px;',
+				'click': ui.createHandlerFn(this, function() {
+					runTest('tcping', server, port, resultSpan);
+				})
+			}, _('TCPing'));
+
+			var urlBtn = E('button', {
+				'class': 'btn cbi-button cbi-button-positive',
+				'type': 'button',
+				'style': 'padding:2px 6px;margin-right:4px;',
+				'click': ui.createHandlerFn(this, function() {
+					runTest('urltest', section_id, null, resultSpan);
+				})
+			}, _('URL Test'));
+
+			return E('div', { 'style': 'white-space:nowrap;' }, [ pingBtn, tcpBtn, urlBtn, resultSpan ]);
 		};
 
 		// Modal options for editing node details
