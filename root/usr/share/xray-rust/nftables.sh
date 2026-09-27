@@ -42,10 +42,10 @@ table inet $NFTABLE_NAME {
 	}
 
 	chain prerouting {
-		type filter hook prerouting priority mangle; policy accept;
+		type nat hook prerouting priority dstnat; policy accept;
 		# DNS Hijacking to local router dnsmasq
-		meta l4proto udp udp dport 53 redirect to :53 comment "xray: hijack dns"
-		meta l4proto tcp tcp dport 53 redirect to :53 comment "xray: hijack dns tcp"
+		udp dport 53 redirect to :53
+		tcp dport 53 redirect to :53
 
 		# Bypass local and destination subnets
 		ip daddr @local_ips return
@@ -53,11 +53,11 @@ table inet $NFTABLE_NAME {
 		ip daddr @bypass_ips return
 
 		# Redirect TCP to xray-rust transparent proxy port
-		meta l4proto tcp redirect to :$REDIR_PORT comment "xray: redirect tcp"
+		meta l4proto tcp redirect to :$REDIR_PORT
 	}
 
 	chain output {
-		type filter hook output priority mangle; policy accept;
+		type nat hook output priority -100; policy accept;
 		# Avoid redirect loop for router self-traffic
 		ip daddr @local_ips return
 		ip daddr @server_ips return
@@ -65,6 +65,7 @@ table inet $NFTABLE_NAME {
 
 		# Do not redirect packets destined to proxy or local ports
 		tcp dport { $REDIR_PORT, 10808, 22, 53, 80, 443 } return
+		meta l4proto tcp redirect to :$REDIR_PORT
 	}
 }
 EOF

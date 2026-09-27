@@ -76,40 +76,14 @@ local function parse_vless(url, socks_port)
         }
     end
     
-    local config = {
-        inbounds = {
-            {
-                tag = "socks-in",
-                protocol = "socks",
-                listen = "127.0.0.1",
-                port = socks_port,
-                settings = { auth = "noauth", udp = true }
-            }
-        },
-        outbounds = {
-            {
-                tag = "proxy",
-                protocol = "vless",
-                settings = {
-                    vnext = {
-                        {
-                            address = host,
-                            port = tonumber(port),
-                            users = {
-                                {
-                                    id = uuid,
-                                    encryption = params["encryption"] or "none",
-                                    flow = params["flow"] or ""
-                                }
-                            }
-                        }
-                    }
-                },
-                streamSettings = stream_settings
-            }
-        }
+    return {
+        address = host,
+        port = tonumber(port),
+        uuid = uuid,
+        encryption = params["encryption"] or "none",
+        flow = params["flow"] or "",
+        stream_settings = stream_settings
     }
-    return config
 end
 
 local socks_port = tonumber(uci:get("xray-rust", "main", "socks_port")) or 10808
@@ -120,21 +94,22 @@ os.execute("mkdir -p " .. conf_dir)
 
 local node_data = nil
 local active_node = uci:get("xray-rust", "main", "active_node")
+local node_sec = active_node and uci:get_all("xray-rust", active_node)
 
-if active_node and uci:get("xray-rust", active_node) then
-    local raw_link = uci:get("xray-rust", active_node, "raw_link")
+if node_sec then
+    local raw_link = node_sec.raw_link
     if raw_link and raw_link ~= "" then
         node_data = parse_vless(raw_link, socks_port)
     else
-        local server = uci:get("xray-rust", active_node, "server")
-        local port = tonumber(uci:get("xray-rust", active_node, "port")) or 443
-        local uuid = uci:get("xray-rust", active_node, "uuid")
-        local transport = uci:get("xray-rust", active_node, "transport") or "xhttp"
-        local security = uci:get("xray-rust", active_node, "security") or "tls"
-        local sni = uci:get("xray-rust", active_node, "sni") or server
-        local fp = uci:get("xray-rust", active_node, "fp") or "chrome"
-        local path = uci:get("xray-rust", active_node, "path") or "/"
-        local mode = uci:get("xray-rust", active_node, "mode") or "auto"
+        local server = node_sec.server
+        local port = tonumber(node_sec.port) or 443
+        local uuid = node_sec.uuid
+        local transport = node_sec.transport or "xhttp"
+        local security = node_sec.security or "tls"
+        local sni = node_sec.sni or server
+        local fp = node_sec.fp or "chrome"
+        local path = node_sec.path or "/"
+        local mode = node_sec.mode or "auto"
 
         local stream_settings = { network = transport, security = security }
         if security == "tls" then
@@ -143,8 +118,8 @@ if active_node and uci:get("xray-rust", active_node) then
             stream_settings.realitySettings = {
                 serverName = sni,
                 fingerprint = fp,
-                publicKey = uci:get("xray-rust", active_node, "pbk") or "",
-                shortId = uci:get("xray-rust", active_node, "sid") or ""
+                publicKey = node_sec.pbk or "",
+                shortId = node_sec.sid or ""
             }
         end
         if transport == "xhttp" then
@@ -261,8 +236,7 @@ local config = {
         },
         {
             tag = "direct",
-            protocol = "freedom",
-            settings = {}
+            protocol = "freedom"
         }
     },
     routing = {
