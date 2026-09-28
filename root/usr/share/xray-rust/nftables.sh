@@ -44,6 +44,11 @@ table inet $NFTABLE_NAME {
 		flags interval
 	}
 
+	set lan_bypass {
+		type ipv4_addr
+		flags interval
+	}
+
 	chain prerouting {
 		type nat hook prerouting priority dstnat; policy accept;
 
@@ -100,6 +105,14 @@ EOF
 		for ip in $(cat /var/etc/xray-rust/bypass_ips); do
 			nft "add element inet $NFTABLE_NAME bypass_ips { $ip }" 2>/dev/null
 		done
+	fi
+
+	# Add LAN client bypass (exempt specific clients from proxy)
+	if [ -f /var/etc/xray-rust/lan_bypass ]; then
+		for ip in $(cat /var/etc/xray-rust/lan_bypass); do
+			nft "add element inet $NFTABLE_NAME lan_bypass { $ip }" 2>/dev/null
+		done
+		nft "insert rule inet $NFTABLE_NAME prerouting ip saddr @lan_bypass return" 2>/dev/null
 	fi
 
 	logger -t xray-rust "nftables transparent proxy rules applied on port $REDIR_PORT (router_proxy=$PROXY_ROUTER, dns_hijack=$HIJACK_DNS)"

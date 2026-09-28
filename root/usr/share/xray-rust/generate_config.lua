@@ -216,13 +216,38 @@ uci:foreach("xray-rust", "rule_group", function(rg)
     end
 end)
 
--- Record server host/ip to bypass loop in nftables
+-- Record server IPs (resolved) and hostnames to bypass loops in nftables and dnsmasq
+local nixio = require("nixio")
 local f_ip = io.open(conf_dir .. "/server_ips", "w")
-if f_ip then
-    for _, nd in pairs(needed_nodes) do
-        if nd.address then f_ip:write(nd.address .. "\n") end
+local f_dom = io.open(conf_dir .. "/node_domains", "w")
+
+for _, nd in pairs(needed_nodes) do
+    if nd.address then
+        if nd.address:match("^%d+%.%d+%.%d+%.%d+$") then
+            if f_ip then f_ip:write(nd.address .. "\n") end
+        else
+            if f_dom then f_dom:write(nd.address .. "\n") end
+            local res = nixio.getaddrinfo(nd.address, "inet")
+            if res and f_ip then
+                for _, r in ipairs(res) do
+                    if r.address then f_ip:write(r.address .. "\n") end
+                end
+            end
+        end
     end
-    f_ip:close()
+end
+if f_ip then f_ip:close() end
+if f_dom then f_dom:close() end
+
+-- Record LAN bypass IPs
+local f_lan = io.open(conf_dir .. "/lan_bypass", "w")
+if f_lan then
+    local bypass_lan = uci:get("xray-rust", "main", "bypass_lan_ips") or {}
+    if type(bypass_lan) == "string" then bypass_lan = { bypass_lan } end
+    for _, ip in ipairs(bypass_lan) do
+        f_lan:write(ip .. "\n")
+    end
+    f_lan:close()
 end
 
 -- Default routing mode: direct vs proxy

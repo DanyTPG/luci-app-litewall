@@ -182,6 +182,11 @@ return view.extend({
 		o.default = '0';
 		o.depends('mode', 'redirect');
 
+		o = s.taboption('basic', form.DynamicList, 'bypass_lan_ips', _('Bypass LAN IP Addresses'));
+		o.description = _('LAN IP addresses (e.g. your management PC) that should completely bypass transparent proxy and DNS redirection.');
+		o.datatype = 'ip4addr';
+		o.optional = true;
+
 		// --- Custom Overrides Tab ---
 		o = s.taboption('custom_override', form.DynamicList, 'direct_domain', _('Direct Domains (Always Bypass)'));
 		o.description = _('Domains that directly connect without going through the proxy.');

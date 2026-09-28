@@ -54,6 +54,13 @@ start_service() {
 			if [ -d "$d" ]; then
 				cat <<EOF > "$d/xray-rust.conf"
 server=/ir/$upstream_dns
+EOF
+				if [ -f /var/etc/xray-rust/node_domains ]; then
+					for dom in $(cat /var/etc/xray-rust/node_domains); do
+						echo "server=/$dom/$upstream_dns" >> "$d/xray-rust.conf"
+					done
+				fi
+				cat <<EOF >> "$d/xray-rust.conf"
 server=127.0.0.1#5335
 no-resolv
 EOF
