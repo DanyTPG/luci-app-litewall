@@ -49,9 +49,6 @@ start_service() {
 	if [ "$mode" = "redirect" ]; then
 		procd_set_param env XRAY_REDIR_PORT="$redir_port"
 		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns"
-		if [ "$hijack_dns" = "1" ] && [ -x /usr/sbin/https-dns-proxy ]; then
-			/etc/init.d/https-dns-proxy start >/dev/null 2>&1
-		fi
 	else
 		/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
 	fi
