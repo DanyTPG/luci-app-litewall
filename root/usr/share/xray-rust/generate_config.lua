@@ -30,6 +30,13 @@ local function parse_vless(url, socks_port)
     local extra_obj = nil
     if params["extra"] then
         extra_obj = json.parse(params["extra"])
+        if extra_obj and type(extra_obj) == "table" and extra_obj.scMaxEachPostBytes then
+            local max_post_bytes = tonumber(uci:get("xray-rust", "main", "max_post_bytes")) or 32768
+            local pb = tonumber(extra_obj.scMaxEachPostBytes)
+            if pb and pb > max_post_bytes then
+                extra_obj.scMaxEachPostBytes = tostring(max_post_bytes)
+            end
+        end
     end
     
     local stream_settings = {
@@ -114,7 +121,21 @@ local function get_node_data(node_id, socks_port)
             }
         end
         if transport == "xhttp" then
-            stream_settings.xhttpSettings = { host = sni, path = path, mode = mode }
+            local xhttp_settings = { host = sni, path = path, mode = mode }
+            if node_sec.extra and node_sec.extra ~= "" then
+                local node_extra = json.parse(node_sec.extra)
+                if node_extra and type(node_extra) == "table" then
+                    local max_post_bytes = tonumber(uci:get("xray-rust", "main", "max_post_bytes")) or 32768
+                    if node_extra.scMaxEachPostBytes then
+                        local pb = tonumber(node_extra.scMaxEachPostBytes)
+                        if pb and pb > max_post_bytes then
+                            node_extra.scMaxEachPostBytes = tostring(max_post_bytes)
+                        end
+                    end
+                    xhttp_settings.extra = node_extra
+                end
+            end
+            stream_settings.xhttpSettings = xhttp_settings
         end
         return {
             address = server,
@@ -377,7 +398,27 @@ table.insert(routing_rules, {
     outboundTag = default_tag
 })
 
+-- Performance and memory tuning policy for embedded routers
+local handshake = tonumber(uci:get("xray-rust", "main", "handshake")) or 4
+local conn_idle = tonumber(uci:get("xray-rust", "main", "conn_idle")) or 30
+local uplink_only = tonumber(uci:get("xray-rust", "main", "uplink_only")) or 2
+local downlink_only = tonumber(uci:get("xray-rust", "main", "downlink_only")) or 4
+local buffer_size = tonumber(uci:get("xray-rust", "main", "buffer_size")) or 16
+
+local policy = {
+    levels = {
+        ["0"] = {
+            handshake = handshake,
+            connIdle = conn_idle,
+            uplinkOnly = uplink_only,
+            downlinkOnly = downlink_only,
+            bufferSize = buffer_size
+        }
+    }
+}
+
 local config = {
+    policy = policy,
     inbounds = {
         {
             tag = "socks-in",

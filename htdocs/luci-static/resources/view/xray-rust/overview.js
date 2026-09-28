@@ -129,6 +129,7 @@ return view.extend({
 		// 2. Main Config with Tabs
 		s = m.section(form.NamedSection, 'main', 'main', _('Settings'));
 		s.tab('basic', _('Basic Settings'));
+		s.tab('tuning', _('Memory & Performance'));
 		s.tab('rules', _('Rule Groups (Shunt)'));
 		s.tab('custom_override', _('Custom Whitelist / Overrides'));
 
@@ -186,6 +187,36 @@ return view.extend({
 		o.description = _('LAN IP addresses (e.g. your management PC) that should completely bypass transparent proxy and DNS redirection.');
 		o.datatype = 'ip4addr';
 		o.optional = true;
+
+		// --- Memory & Performance Tuning Tab ---
+		o = s.taboption('tuning', form.ListValue, 'buffer_size', _('Relay Buffer Size (KiB)'));
+		o.value('8', '8 KiB (Ultra Low Memory)');
+		o.value('16', '16 KiB (Recommended for 128 MB RAM)');
+		o.value('32', '32 KiB');
+		o.value('64', '64 KiB');
+		o.value('128', '128 KiB (Xray Core Default)');
+		o.default = '16';
+		o.description = _('Per-connection buffer size for relay copying. 16 KiB significantly reduces memory pressure under heavy concurrent connections.');
+
+		o = s.taboption('tuning', form.Value, 'conn_idle', _('Proxy Connection Idle Timeout (Seconds)'));
+		o.datatype = 'uinteger';
+		o.default = '30';
+		o.description = _('Closes idle proxy TCP connections after N seconds of inactivity (default 30s vs core 300s) to free socket and memory resources.');
+
+		o = s.taboption('tuning', form.Value, 'redir_idle', _('Transparent Redir Idle Timeout (Seconds)'));
+		o.datatype = 'uinteger';
+		o.default = '60';
+		o.description = _('Closes transparent redirected client sockets when dormant for N seconds, preventing mobile app background connections from lingering.');
+
+		o = s.taboption('tuning', form.Value, 'handshake', _('Handshake Timeout (Seconds)'));
+		o.datatype = 'uinteger';
+		o.default = '4';
+		o.description = _('Maximum seconds allowed for establishing outbound TCP/TLS handshakes.');
+
+		o = s.taboption('tuning', form.Value, 'max_post_bytes', _('XHTTP Max POST Buffer Cap (Bytes)'));
+		o.datatype = 'uinteger';
+		o.default = '32768';
+		o.description = _('Safety ceiling for XHTTP packet-up POST buffers (e.g. 32768 = 32 KiB). Prevents nodes configured with huge post buffers (like 1 MB) from causing Out-Of-Memory.');
 
 		// --- Custom Overrides Tab ---
 		o = s.taboption('custom_override', form.DynamicList, 'direct_domain', _('Direct Domains (Always Bypass)'));

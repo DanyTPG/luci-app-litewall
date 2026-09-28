@@ -77,7 +77,9 @@ EOF
 	procd_set_param command "$PROG" run -config "$CONF_FILE"
 
 	if [ "$mode" = "redirect" ]; then
-		procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335"
+		local redir_idle
+		config_get redir_idle main redir_idle "60"
+		procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335" XRAY_REDIR_IDLE_TIMEOUT="$redir_idle"
 	fi
 
 	procd_set_param stdout 1
