@@ -1,0 +1,9 @@
+#!/bin/sh
+uci -q get ucitrack.@xray-rust[0] >/dev/null || {
+	cat <<EOF >> /etc/config/ucitrack
+
+config xray-rust
+	option init 'xray-rust'
+EOF
+}
+exit 0
