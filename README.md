@@ -8,8 +8,9 @@ LuCI web management application for `xray-rust`, a memory-efficient Rust impleme
 - **Full Transparent Proxying**: Intercepts router and LAN TCP traffic via OpenWrt `nftables` redirect into a built-in SO_ORIGINAL_DST redirect bridge.
 - **DNS Leak Protection**: Automatic port 53 DNS hijacking redirects all client DNS queries to local `dnsmasq`.
 - **Protocol Support**: VLESS + XHTTP (`stream-up`, `packet-up`, `stream-one`), WebSocket, HTTPUpgrade, gRPC, TLS, Reality.
-- **Multi-Node Management**: Store multiple nodes, switch active nodes instantly from LuCI dropdown, import directly from `vless://` share URLs.
-- **Routing Rules**: Configurable routing modes (Bypass LAN / Private IPs, Bypass Iran Domestic `geoip:ir`/`geosite:ir`, Global Proxy), plus custom whitelist/blacklist domain and IP lists.
+- **Multi-Node Management & Diagnostics**: Store multiple nodes, switch active nodes instantly from LuCI dropdown, import directly from `vless://` share URLs, and perform Passwall2-style one-click latency diagnostics (Ping, TCPing, URL Test).
+- **Rule Groups & Shunting**: Shunt rules by traffic category (Iran domestic, GFW blocked, Sanctions, ADS adblocking) routing to specific nodes, direct bypass, or block (native blackhole).
+- **Configurable Default Routing Mode**: Global switch between Direct (bypass by default, only proxy matched rules) and Proxy (global proxy fallback).
 - **Procd Integration**: Native OpenWrt service lifecycle management with automatic respawn and configuration validation.
 
 ## Architecture

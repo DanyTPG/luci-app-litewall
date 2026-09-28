@@ -208,7 +208,7 @@ local needed_nodes = {}
 needed_nodes[active_node] = active_node_data
 
 uci:foreach("xray-rust", "rule_group", function(rg)
-    if rg.enabled == "1" and rg.target_node and rg.target_node ~= "_direct" and rg.target_node ~= "_default" then
+    if rg.enabled == "1" and rg.target_node and rg.target_node ~= "_direct" and rg.target_node ~= "_block" and rg.target_node ~= "_blackhole" and rg.target_node ~= "_default" then
         if not needed_nodes[rg.target_node] then
             local nd = get_node_data(rg.target_node, socks_port)
             if nd then needed_nodes[rg.target_node] = nd end
@@ -225,11 +225,21 @@ if f_ip then
     f_ip:close()
 end
 
--- Build outbounds: default is direct (freedom), proxy is used only for matched rules
-local outbounds = {
-    { tag = "direct", protocol = "freedom" },
-    build_outbound("proxy", active_node_data)
-}
+-- Default routing mode: direct vs proxy
+local default_routing_mode = uci:get("xray-rust", "main", "default_routing_mode") or "direct"
+local default_tag = (default_routing_mode == "proxy") and "proxy" or "direct"
+
+-- Build outbounds: order first outbound according to default_routing_mode
+local outbounds = {}
+if default_tag == "proxy" then
+    table.insert(outbounds, build_outbound("proxy", active_node_data))
+    table.insert(outbounds, { tag = "direct", protocol = "freedom" })
+else
+    table.insert(outbounds, { tag = "direct", protocol = "freedom" })
+    table.insert(outbounds, build_outbound("proxy", active_node_data))
+end
+table.insert(outbounds, { tag = "block", protocol = "blackhole" })
+
 for nid, nd in pairs(needed_nodes) do
     if nid ~= active_node then
         table.insert(outbounds, build_outbound(nid, nd))
@@ -251,6 +261,8 @@ uci:foreach("xray-rust", "rule_group", function(rg)
         local target_tag = "proxy"
         if rg.target_node == "_direct" then
             target_tag = "direct"
+        elseif rg.target_node == "_block" or rg.target_node == "_blackhole" then
+            target_tag = "block"
         elseif rg.target_node and rg.target_node ~= "_default" and needed_nodes[rg.target_node] then
             target_tag = rg.target_node
         end
@@ -328,11 +340,11 @@ if direct_ips then
     end
 end
 
--- Fallback rule: any unrouted TCP/UDP traffic defaults to direct
+-- Fallback rule: any unrouted TCP/UDP traffic defaults to default_tag
 table.insert(routing_rules, {
     type = "field",
     network = "tcp,udp",
-    outboundTag = "direct"
+    outboundTag = default_tag
 })
 
 local config = {

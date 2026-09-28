@@ -152,6 +152,12 @@ return view.extend({
 			o.default = nodes[0]['.name'];
 		}
 
+		o = s.taboption('basic', form.ListValue, 'default_routing_mode', _('Default Routing Mode'));
+		o.value('direct', _('Direct (Bypass - only proxy matched rules)'));
+		o.value('proxy', _('Proxy (Global - route unmatched traffic to proxy)'));
+		o.default = 'direct';
+		o.description = _('Defines the fallback routing behavior for traffic not matched by any rule group.');
+
 		o = s.taboption('basic', form.Value, 'socks_port', _('SOCKS5 Port'));
 		o.datatype = 'port';
 		o.default = '10808';
@@ -279,7 +285,8 @@ return view.extend({
 
 		o = s.option(form.ListValue, 'target_node', _('Target Node'));
 		o.value('_direct', _('Direct (Bypass Proxy)'));
-		o.value('_default', _('Default Active Node'));
+		o.value('_default', _('Default Active Node (Proxy)'));
+		o.value('_block', _('Block (Blackhole)'));
 		nodes.forEach(function(node) {
 			var label = (node.remark || node['.name']);
 			o.value(node['.name'], _('Node: ') + label);
