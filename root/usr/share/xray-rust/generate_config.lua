@@ -260,31 +260,45 @@ uci:foreach("xray-rust", "rule_group", function(rg)
         local ips = rg.ip_list
         if ips and type(ips) == "string" then ips = { ips } end
 
-        local rule = {
-            type = "field",
-            outboundTag = target_tag
-        }
-        local has_criteria = false
+        local net = (rg.network and rg.network ~= "" and rg.network ~= "tcp,udp") and rg.network or nil
+        local prt = (rg.port and rg.port ~= "") and rg.port or nil
 
+        -- Crucial: separate domain rules and IP rules into distinct routing rules!
+        -- In Xray, multiple criteria inside a single rule are combined with logical AND.
+        -- If domain and IP are in the same rule, both must match simultaneously,
+        -- which breaks domain-only connections and IP-only connections (like Telegram).
         if domains and #domains > 0 then
-            rule.domain = domains
-            has_criteria = true
-        end
-        if ips and #ips > 0 then
-            rule.ip = ips
-            has_criteria = true
-        end
-        if rg.network and rg.network ~= "" and rg.network ~= "tcp,udp" then
-            rule.network = rg.network
-            has_criteria = true
-        end
-        if rg.port and rg.port ~= "" then
-            rule.port = rg.port
-            has_criteria = true
+            local r_dom = {
+                type = "field",
+                outboundTag = target_tag,
+                domain = domains
+            }
+            if net then r_dom.network = net end
+            if prt then r_dom.port = prt end
+            table.insert(routing_rules, r_dom)
         end
 
-        if has_criteria then
-            table.insert(routing_rules, rule)
+        if ips and #ips > 0 then
+            local r_ip = {
+                type = "field",
+                outboundTag = target_tag,
+                ip = ips
+            }
+            if net then r_ip.network = net end
+            if prt then r_ip.port = prt end
+            table.insert(routing_rules, r_ip)
+        end
+
+        if (not domains or #domains == 0) and (not ips or #ips == 0) then
+            if net or prt then
+                local r_misc = {
+                    type = "field",
+                    outboundTag = target_tag
+                }
+                if net then r_misc.network = net end
+                if prt then r_misc.port = prt end
+                table.insert(routing_rules, r_misc)
+            end
         end
     end
 end)
