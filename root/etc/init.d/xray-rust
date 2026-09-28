@@ -17,6 +17,7 @@ start_service() {
 	config_get redir_port main redir_port "1081"
 	config_get_bool proxy_router main proxy_router 0
 	config_get_bool hijack_dns main hijack_dns 1
+	config_get_bool block_quic main block_quic 1
 
 	[ "$enabled" -eq 1 ] || {
 		/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
@@ -48,7 +49,7 @@ start_service() {
 
 	if [ "$mode" = "redirect" ]; then
 		procd_set_param env XRAY_REDIR_PORT="$redir_port"
-		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns"
+		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns" "$block_quic"
 	else
 		/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
 	fi

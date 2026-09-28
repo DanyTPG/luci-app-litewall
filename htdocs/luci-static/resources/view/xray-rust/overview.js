@@ -172,6 +172,11 @@ return view.extend({
 		o.default = '1';
 		o.depends('mode', 'redirect');
 
+		o = s.taboption('basic', form.Flag, 'block_quic', _('Block QUIC (UDP 443)'));
+		o.description = _('Reject UDP port 443 to force Android apps (YouTube, Twitter) and browsers to fall back to TCP and route through proxy. Does not affect gaming or other UDP ports.');
+		o.default = '1';
+		o.depends('mode', 'redirect');
+
 		o = s.taboption('basic', form.Flag, 'proxy_router', _('Proxy Router Itself'));
 		o.description = _('Also route router-originated traffic through the proxy.');
 		o.default = '0';

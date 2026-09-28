@@ -5,6 +5,7 @@ NFTABLE_NAME="xray_rust"
 REDIR_PORT="${2:-1081}"
 PROXY_ROUTER="${3:-0}"
 HIJACK_DNS="${4:-1}"
+BLOCK_QUIC="${5:-1}"
 
 start() {
 	stop >/dev/null 2>&1
@@ -63,6 +64,11 @@ EOF
 		nft "insert rule inet $NFTABLE_NAME prerouting tcp dport 53 redirect to :53" 2>/dev/null
 	fi
 
+	# Block QUIC (UDP 443) to force clients to fall back to TCP and route via proxy
+	if [ "$BLOCK_QUIC" = "1" ]; then
+		nft "add rule inet $NFTABLE_NAME prerouting udp dport 443 reject" 2>/dev/null
+	fi
+
 	# Optional router self-proxy
 	if [ "$PROXY_ROUTER" = "1" ]; then
 		nft -f - <<EOF
@@ -77,6 +83,9 @@ table inet $NFTABLE_NAME {
 	}
 }
 EOF
+		if [ "$BLOCK_QUIC" = "1" ]; then
+			nft "add rule inet $NFTABLE_NAME output udp dport 443 reject" 2>/dev/null
+		fi
 	fi
 
 	# Add server IPs if available

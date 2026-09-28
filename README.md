@@ -6,7 +6,7 @@ LuCI web management application for `xray-rust`, a memory-efficient Rust impleme
 
 - **Extreme Low Memory**: ~6.5 MB RSS compared to Go Xray's ~80+ MB RSS / ~590 MB VSZ.
 - **Full Transparent Proxying**: Intercepts router and LAN TCP traffic via OpenWrt `nftables` redirect into a built-in SO_ORIGINAL_DST redirect bridge.
-- **DNS Leak Protection**: Automatic port 53 DNS hijacking redirects all client DNS queries to local `dnsmasq`.
+- **DNS Leak & QUIC Protection**: Automatic port 53 DNS hijacking redirects all client DNS queries to local `dnsmasq`. Optional QUIC (UDP 443) blocker forces Android apps and browsers onto TCP proxy without touching gaming UDP packets.
 - **Protocol Support**: VLESS + XHTTP (`stream-up`, `packet-up`, `stream-one`), WebSocket, HTTPUpgrade, gRPC, TLS, Reality.
 - **Multi-Node Management & Diagnostics**: Store multiple nodes, switch active nodes instantly from LuCI dropdown, import directly from `vless://` share URLs, and perform Passwall2-style one-click latency diagnostics (Ping, TCPing, URL Test).
 - **Rule Groups & Shunting**: Shunt rules by traffic category (Iran domestic, GFW blocked, Sanctions, ADS adblocking) routing to specific nodes, direct bypass, or block (native blackhole).
