@@ -5,7 +5,7 @@ config main 'main'
 	option socks_port '10808'
 	option redir_port '1081'
 	option routing_mode 'rules'
-	option proxy_router '1'
+	option proxy_router '0'
 	option hijack_dns '1'
 
 config rule_group 'Iran'

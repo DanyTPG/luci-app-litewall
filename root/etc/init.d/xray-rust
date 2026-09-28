@@ -10,14 +10,17 @@ CONF_FILE=$CONF_DIR/config.json
 GEN_SCRIPT=/usr/share/xray-rust/generate_config.lua
 
 start_service() {
-	local enabled mode redir_port
+	local enabled mode redir_port proxy_router hijack_dns
 	config_load xray-rust
 	config_get_bool enabled main enabled 0
 	config_get mode main mode "redirect"
 	config_get redir_port main redir_port "1081"
+	config_get_bool proxy_router main proxy_router 0
+	config_get_bool hijack_dns main hijack_dns 1
 
 	[ "$enabled" -eq 1 ] || {
-		logger -t xray-rust "Service disabled in config"
+		/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
+		logger -t xray-rust "Service disabled in config; removed nftables rules"
 		return 0
 	}
 
@@ -45,7 +48,9 @@ start_service() {
 
 	if [ "$mode" = "redirect" ]; then
 		procd_set_param env XRAY_REDIR_PORT="$redir_port"
-		/usr/share/xray-rust/nftables.sh start "$redir_port"
+		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns"
+	else
+		/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
 	fi
 
 	procd_set_param respawn 3600 5 0
@@ -57,7 +62,12 @@ start_service() {
 
 stop_service() {
 	/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
-	logger -t xray-rust "Service stopped"
+	logger -t xray-rust "Service stopped; removed nftables rules"
+}
+
+reload_service() {
+	stop
+	start
 }
 
 service_triggers() {

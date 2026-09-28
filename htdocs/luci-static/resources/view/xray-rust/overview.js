@@ -168,7 +168,7 @@ return view.extend({
 
 		o = s.taboption('basic', form.Flag, 'proxy_router', _('Proxy Router Itself'));
 		o.description = _('Also route router-originated traffic through the proxy.');
-		o.default = '1';
+		o.default = '0';
 		o.depends('mode', 'redirect');
 
 		// --- Custom Overrides Tab ---

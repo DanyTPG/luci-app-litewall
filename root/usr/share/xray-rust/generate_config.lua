@@ -225,8 +225,9 @@ if f_ip then
     f_ip:close()
 end
 
--- Build outbounds
+-- Build outbounds: default is direct (freedom), proxy is used only for matched rules
 local outbounds = {
+    { tag = "direct", protocol = "freedom" },
     build_outbound("proxy", active_node_data)
 }
 for nid, nd in pairs(needed_nodes) do
@@ -234,7 +235,6 @@ for nid, nd in pairs(needed_nodes) do
         table.insert(outbounds, build_outbound(nid, nd))
     end
 end
-table.insert(outbounds, { tag = "direct", protocol = "freedom" })
 
 -- Build routing rules
 local routing_rules = {
@@ -314,6 +314,13 @@ if direct_ips then
     end
 end
 
+-- Fallback rule: any unrouted TCP/UDP traffic defaults to direct
+table.insert(routing_rules, {
+    type = "field",
+    network = "tcp,udp",
+    outboundTag = "direct"
+})
+
 local config = {
     inbounds = {
         {
@@ -321,7 +328,12 @@ local config = {
             protocol = "socks",
             listen = "127.0.0.1",
             port = socks_port,
-            settings = { auth = "noauth", udp = true }
+            settings = { auth = "noauth", udp = true },
+            sniffing = {
+                enabled = true,
+                destOverride = { "http", "tls", "quic" },
+                routeOnly = true
+            }
         }
     },
     outbounds = outbounds,
