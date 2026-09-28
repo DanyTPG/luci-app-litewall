@@ -363,7 +363,7 @@ local config = {
             sniffing = {
                 enabled = true,
                 destOverride = { "http", "tls", "quic" },
-                routeOnly = true
+                routeOnly = false
             }
         }
     },
