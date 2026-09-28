@@ -6,7 +6,8 @@
 			"uci": [ "xray-rust" ],
 			"file": {
 				"/var/etc/xray-rust/config.json": [ "read" ],
-				"/usr/share/xray-rust/test.sh": [ "exec" ]
+				"/usr/share/xray-rust/test.sh": [ "exec" ],
+				"/usr/share/xray-rust/clean.sh": [ "exec" ]
 			},
 			"ubus": {
 				"file": [ "exec" ],

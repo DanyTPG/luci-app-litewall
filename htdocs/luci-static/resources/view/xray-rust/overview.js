@@ -126,6 +126,50 @@ return view.extend({
 			return html;
 		};
 
+		o = s.option(form.DummyValue, '_recovery', _('Emergency Actions'));
+		o.rawhtml = true;
+		o.cfgvalue = function() {
+			return E('div', { 'style': 'display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:4px;' }, [
+				E('button', {
+					'class': 'cbi-button cbi-button-reset',
+					'style': 'background:#e74c3c;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-weight:bold;',
+					'click': function(ev) {
+						ev.preventDefault();
+						var btn = ev.target;
+						btn.disabled = true;
+						btn.innerText = _('Resetting...');
+						fs.exec('/usr/share/xray-rust/clean.sh', ['clean']).then(function(res) {
+							ui.addNotification(null, E('p', _('Emergency Reset Completed: All firewall redirect rules removed, DNS restored, and internet unblocked.')), 'info');
+							window.setTimeout(function() { window.location.reload(); }, 1500);
+						}).catch(function(err) {
+							ui.addNotification(null, E('p', _('Reset failed: ') + err.message), 'error');
+							btn.disabled = false;
+							btn.innerText = _('Emergency Reset & Flush');
+						});
+					}
+				}, _('Emergency Reset & Flush Firewall')),
+
+				E('button', {
+					'class': 'cbi-button cbi-button-action',
+					'style': 'background:#2980b9;color:#fff;border:none;padding:5px 12px;border-radius:4px;cursor:pointer;font-weight:bold;',
+					'click': function(ev) {
+						ev.preventDefault();
+						var btn = ev.target;
+						btn.disabled = true;
+						btn.innerText = _('Restarting...');
+						fs.exec('/usr/share/xray-rust/clean.sh', ['restart']).then(function(res) {
+							ui.addNotification(null, E('p', _('Clean Restart Completed: Service and firewall re-initialized.')), 'info');
+							window.setTimeout(function() { window.location.reload(); }, 2000);
+						}).catch(function(err) {
+							ui.addNotification(null, E('p', _('Restart failed: ') + err.message), 'error');
+							btn.disabled = false;
+							btn.innerText = _('Clean Restart Service');
+						});
+					}
+				}, _('Clean Restart Service'))
+			]);
+		};
+
 		// 2. Main Config with Tabs
 		s = m.section(form.NamedSection, 'main', 'main', _('Settings'));
 		s.tab('basic', _('Basic Settings'));
