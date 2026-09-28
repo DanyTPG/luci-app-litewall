@@ -33,6 +33,8 @@ config rule_group 'GFW'
 	list ip_list 'geoip:telegram'
 	list ip_list 'geoip:google'
 	list ip_list 'geoip:twitter'
+	list ip_list '8.8.8.8'
+	list ip_list '1.1.1.1'
 	list ip_list '198.51.100.1'
 
 config rule_group 'Sanction'

@@ -48,10 +48,26 @@ start_service() {
 	procd_set_param command $PROG run -config $CONF_FILE
 
 	if [ "$mode" = "redirect" ]; then
-		procd_set_param env XRAY_REDIR_PORT="$redir_port"
+		procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335"
 		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns" "$block_quic"
+		
+		# Configure dnsmasq to forward non-domestic queries to clean DNS
+		local upstream_dns=$(uci -q get dhcp.@dnsmasq[0].server | awk '{print $1}')
+		[ -z "$upstream_dns" ] && upstream_dns="192.168.100.1"
+		for d in /tmp/dnsmasq.*.d; do
+			if [ -d "$d" ]; then
+				cat <<EOF > "$d/xray-rust.conf"
+server=/ir/$upstream_dns
+server=127.0.0.1#5335
+no-resolv
+EOF
+			fi
+		done
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	else
 		/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
+		rm -f /tmp/dnsmasq.*.d/xray-rust.conf 2>/dev/null
+		/etc/init.d/dnsmasq restart >/dev/null 2>&1
 	fi
 
 	procd_set_param respawn 3600 5 0
@@ -63,7 +79,9 @@ start_service() {
 
 stop_service() {
 	/usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
-	logger -t xray-rust "Service stopped; removed nftables rules"
+	rm -f /tmp/dnsmasq.*.d/xray-rust.conf 2>/dev/null
+	/etc/init.d/dnsmasq restart >/dev/null 2>&1
+	logger -t xray-rust "Service stopped; removed nftables rules and restored dnsmasq"
 }
 
 reload_service() {

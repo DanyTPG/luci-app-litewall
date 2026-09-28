@@ -252,6 +252,11 @@ local routing_rules = {
         type = "field",
         ip = { "geoip:private", "127.0.0.0/8", "10.0.0.0/8", "192.168.0.0/16" },
         outboundTag = "direct"
+    },
+    {
+        type = "field",
+        ip = { "8.8.8.8", "8.8.4.4", "1.1.1.1", "1.0.0.1" },
+        outboundTag = "proxy"
     }
 }
 
