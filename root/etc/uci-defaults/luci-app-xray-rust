@@ -6,4 +6,17 @@ config xray-rust
 	option init 'xray-rust'
 EOF
 }
+
+# Ensure init script is enabled on boot
+/etc/init.d/xray-rust enable >/dev/null 2>&1
+
+# Ensure crontab entry for watchdog exists
+CRON_FILE="/etc/crontabs/root"
+mkdir -p /etc/crontabs
+touch "$CRON_FILE"
+if ! grep -q "/usr/share/xray-rust/watchdog.sh" "$CRON_FILE"; then
+	echo "* * * * * /usr/share/xray-rust/watchdog.sh" >> "$CRON_FILE"
+	/etc/init.d/cron restart >/dev/null 2>&1
+fi
+
 exit 0

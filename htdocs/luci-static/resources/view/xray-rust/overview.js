@@ -227,6 +227,15 @@ return view.extend({
 		o.default = '0';
 		o.depends('mode', 'redirect');
 
+		o = s.taboption('basic', form.Flag, 'watchdog', _('Auto-Restart Watchdog'));
+		o.description = _('Automatically monitor xray-rust every minute via crontab and cleanly restart firewall and daemon if a crash occurs.');
+		o.default = '1';
+
+		o = s.taboption('basic', form.Value, 'ntfy_topic', _('ntfy Notification Topic'));
+		o.description = _('Optional ntfy topic (e.g. my-alert-topic or ntfy.sh/topic) to send crash restart alerts to your phone.');
+		o.placeholder = 'my-alert-topic';
+		o.depends('watchdog', '1');
+
 		o = s.taboption('basic', form.DynamicList, 'bypass_lan_ips', _('Bypass LAN IP Addresses'));
 		o.description = _('LAN IP addresses (e.g. your management PC) that should completely bypass transparent proxy and DNS redirection.');
 		o.datatype = 'ip4addr';

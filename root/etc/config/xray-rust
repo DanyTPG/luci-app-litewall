@@ -16,6 +16,8 @@ config main 'main'
 	option uplink_only '2'
 	option downlink_only '4'
 	option max_post_bytes '32768'
+	option watchdog '1'
+	option ntfy_topic 'my-alert-topic'
 
 config rule_group 'Iran'
 	option remarks 'Iran (Domestic)'
