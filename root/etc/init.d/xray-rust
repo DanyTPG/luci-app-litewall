@@ -10,7 +10,7 @@ CONF_FILE=$CONF_DIR/config.json
 GEN_SCRIPT=/usr/share/xray-rust/generate_config.lua
 
 start_service() {
-	local enabled mode redir_port proxy_router hijack_dns watchdog
+	local enabled mode redir_port proxy_router hijack_dns block_quic watchdog bypass_iran_firewall
 	config_load xray-rust
 	config_get_bool enabled main enabled 0
 	config_get mode main mode "redirect"
@@ -19,6 +19,7 @@ start_service() {
 	config_get_bool hijack_dns main hijack_dns 1
 	config_get_bool block_quic main block_quic 1
 	config_get_bool watchdog main watchdog 1
+	config_get_bool bypass_iran_firewall main bypass_iran_firewall 1
 
 	# Sync crontab watchdog entry
 	local cron_file="/etc/crontabs/root"
@@ -62,7 +63,7 @@ start_service() {
 
 	# Apply firewall and DNS configuration before starting daemon
 	if [ "$mode" = "redirect" ]; then
-		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns" "$block_quic"
+		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns" "$block_quic" "$bypass_iran_firewall"
 		
 		# Configure dnsmasq to forward non-domestic queries to clean DNS
 		local upstream_dns=$(uci -q get dhcp.@dnsmasq[0].server | awk '{print $1}')

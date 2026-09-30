@@ -61,11 +61,13 @@ local function parse_vless(url, socks_port)
     end
     
     if stream_settings.network == "xhttp" or stream_settings.network == "splithttp" then
+        local h2_window = tonumber(uci:get("xray-rust", "main", "h2_window")) or 262144
         stream_settings.xhttpSettings = {
             host = params["host"] or host,
             path = params["path"] or "/",
             mode = params["mode"] or "auto",
-            extra = extra_obj
+            extra = extra_obj,
+            h2StreamReceiveWindow = h2_window
         }
     elseif stream_settings.network == "ws" or stream_settings.network == "websocket" then
         stream_settings.wsSettings = {
@@ -121,7 +123,8 @@ local function get_node_data(node_id, socks_port)
             }
         end
         if transport == "xhttp" then
-            local xhttp_settings = { host = sni, path = path, mode = mode }
+            local h2_window = tonumber(uci:get("xray-rust", "main", "h2_window")) or 262144
+            local xhttp_settings = { host = sni, path = path, mode = mode, h2StreamReceiveWindow = h2_window }
             if node_sec.extra and node_sec.extra ~= "" then
                 local node_extra = json.parse(node_sec.extra)
                 if node_extra and type(node_extra) == "table" then

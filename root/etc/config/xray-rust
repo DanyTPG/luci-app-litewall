@@ -16,6 +16,8 @@ config main 'main'
 	option uplink_only '2'
 	option downlink_only '4'
 	option max_post_bytes '32768'
+	option h2_window '262144'
+	option bypass_iran_firewall '1'
 	option watchdog '1'
 	option ntfy_topic 'my-alert-topic'
 

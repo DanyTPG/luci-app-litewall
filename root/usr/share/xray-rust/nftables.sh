@@ -6,6 +6,7 @@ REDIR_PORT="${2:-1081}"
 PROXY_ROUTER="${3:-0}"
 HIJACK_DNS="${4:-1}"
 BLOCK_QUIC="${5:-1}"
+BYPASS_IRAN="${6:-1}"
 
 start() {
 	stop >/dev/null 2>&1
@@ -14,6 +15,35 @@ start() {
 	SERVER_IPS=""
 	if [ -f /var/etc/xray-rust/server_ips ]; then
 		SERVER_IPS=$(cat /var/etc/xray-rust/server_ips)
+	fi
+
+	# Generate Iranian CIDR nft file if missing
+	if [ "$BYPASS_IRAN" = "1" ]; then
+		if [ ! -s /var/etc/xray-rust/iran_cidrs.nft ]; then
+			mkdir -p /var/etc/xray-rust
+			local geofile="/usr/share/xray/geoip.dat"
+			[ ! -f "$geofile" ] && geofile="/usr/share/v2ray/geoip.dat"
+			if [ -f "$geofile" ] && command -v geoview >/dev/null 2>&1; then
+				geoview -input "$geofile" -list ir -ipv6=false -lowmem=true -output /tmp/iran_cidrs.raw 2>/dev/null
+				lua -e '
+				local f = io.open("/tmp/iran_cidrs.raw")
+				if f then
+					local cidrs = {}
+					for line in f:lines() do
+						local c = line:match("^%s*(%S+)")
+						if c then table.insert(cidrs, c) end
+					end
+					f:close()
+					local out = io.open("/var/etc/xray-rust/iran_cidrs.nft", "w")
+					if out then
+						out:write("add element inet '"$NFTABLE_NAME"' iran_ips { " .. table.concat(cidrs, ", ") .. " }\n")
+						out:close()
+					end
+				end
+				'
+				rm -f /tmp/iran_cidrs.raw 2>/dev/null
+			fi
+		fi
 	fi
 
 	nft -f - <<EOF
@@ -32,6 +62,11 @@ table inet $NFTABLE_NAME {
 			224.0.0.0/4,
 			240.0.0.0/4
 		}
+	}
+
+	set iran_ips {
+		type ipv4_addr
+		flags interval
 	}
 
 	set server_ips {
@@ -54,6 +89,7 @@ table inet $NFTABLE_NAME {
 
 		# Bypass local and destination subnets
 		ip daddr @local_ips return
+		ip daddr @iran_ips return
 		ip daddr @server_ips return
 		ip daddr @bypass_ips return
 
@@ -81,6 +117,7 @@ table inet $NFTABLE_NAME {
 	chain output {
 		type nat hook output priority -100; policy accept;
 		ip daddr @local_ips return
+		ip daddr @iran_ips return
 		ip daddr @server_ips return
 		ip daddr @bypass_ips return
 		tcp dport { $REDIR_PORT, 10808, 22, 53 } return
@@ -91,6 +128,11 @@ EOF
 		if [ "$BLOCK_QUIC" = "1" ]; then
 			nft "add rule inet $NFTABLE_NAME output udp dport 443 reject" 2>/dev/null
 		fi
+	fi
+
+	# Load Iranian CIDR set elements into kernel
+	if [ "$BYPASS_IRAN" = "1" ] && [ -s /var/etc/xray-rust/iran_cidrs.nft ]; then
+		nft -f /var/etc/xray-rust/iran_cidrs.nft 2>/dev/null
 	fi
 
 	# Add server IPs if available

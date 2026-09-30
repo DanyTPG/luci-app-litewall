@@ -170,11 +170,12 @@ return view.extend({
 			]);
 		};
 
-		// 2. Main Config with Tabs
+		// 2. Main Config with Unified Tab Groups
 		s = m.section(form.NamedSection, 'main', 'main', _('Settings'));
 		s.tab('basic', _('Basic Settings'));
+		s.tab('nodes', _('Node Management'));
+		s.tab('rules', _('Routing Rule Groups'));
 		s.tab('tuning', _('Memory & Performance'));
-		s.tab('rules', _('Rule Groups (Shunt)'));
 		s.tab('custom_override', _('Custom Whitelist / Overrides'));
 
 		// --- Basic Settings Tab ---
@@ -222,6 +223,11 @@ return view.extend({
 		o.default = '1';
 		o.depends('mode', 'redirect');
 
+		o = s.taboption('basic', form.Flag, 'bypass_iran_firewall', _('Bypass Domestic IPs in Firewall'));
+		o.description = _('Directly bypass Iranian IP ranges in nftables to route domestic traffic via Linux kernel fast-path, greatly reducing RAM and CPU load.');
+		o.default = '1';
+		o.depends('mode', 'redirect');
+
 		o = s.taboption('basic', form.Flag, 'proxy_router', _('Proxy Router Itself'));
 		o.description = _('Also route router-originated traffic through the proxy.');
 		o.default = '0';
@@ -242,6 +248,16 @@ return view.extend({
 		o.optional = true;
 
 		// --- Memory & Performance Tuning Tab ---
+		o = s.taboption('tuning', form.ListValue, 'h2_window', _('HTTP/2 Stream Receive Window'));
+		o.value('131072', '128 KiB (Ultra Low Memory)');
+		o.value('262144', '256 KiB (Recommended for 128/256 MB RAM)');
+		o.value('524288', '512 KiB');
+		o.value('1048576', '1 MiB');
+		o.value('2097152', '2 MiB');
+		o.value('4194304', '4 MiB (Default)');
+		o.default = '262144';
+		o.description = _('Caps the HTTP/2 stream receive window for XHTTP uplink connections. Lowering from 4 MiB to 256 KiB drastically reduces memory spikes without sacrificing streaming performance.');
+
 		o = s.taboption('tuning', form.ListValue, 'buffer_size', _('Relay Buffer Size (KiB)'));
 		o.value('8', '8 KiB (Ultra Low Memory)');
 		o.value('16', '16 KiB (Recommended for 128 MB RAM)');
@@ -284,128 +300,133 @@ return view.extend({
 		o.description = _('IP CIDRs to bypass (e.g. 10.0.0.0/8).');
 		o.placeholder = '192.168.0.0/16';
 
-		// 3. Node Management Section with Tests
-		s = m.section(form.GridSection, 'node', _('Node Management'));
-		s.addremove = true;
-		s.anonymous = false;
-		s.sortable = true;
+		// --- Tab 2: Node Management (Inside dedicated tab) ---
+		o = s.taboption('nodes', form.SectionValue, '_nodes', form.GridSection, 'node', _('Node Management'),
+			_('Configure VLESS/XHTTP proxy nodes and run real-time latency tests.'));
+		var s_node = o.subsection;
+		s_node.addremove = true;
+		s_node.anonymous = false;
+		s_node.sortable = true;
 
-		o = s.option(form.Value, 'remark', _('Remark / Name'));
-		o.placeholder = 'My VLESS Server';
+		var no;
+		no = s_node.option(form.Value, 'remark', _('Remark / Name'));
+		no.placeholder = 'My VLESS Server';
 
-		o = s.option(form.ListValue, 'type', _('Protocol'));
-		o.value('vless', 'VLESS');
-		o.default = 'vless';
+		no = s_node.option(form.ListValue, 'type', _('Protocol'));
+		no.value('vless', 'VLESS');
+		no.default = 'vless';
 
-		o = s.option(form.Value, 'server', _('Server Address'));
-		o.datatype = 'host';
-		o.placeholder = 'example.com';
+		no = s_node.option(form.Value, 'server', _('Server Address'));
+		no.datatype = 'host';
+		no.placeholder = 'example.com';
 
-		o = s.option(form.Value, 'port', _('Port'));
-		o.datatype = 'port';
-		o.default = '443';
+		no = s_node.option(form.Value, 'port', _('Port'));
+		no.datatype = 'port';
+		no.default = '443';
 
-		o = s.option(form.ListValue, 'transport', _('Transport'));
-		o.value('xhttp', 'XHTTP');
-		o.value('ws', 'WebSocket');
-		o.value('httpupgrade', 'HTTPUpgrade');
-		o.value('grpc', 'gRPC');
-		o.value('tcp', 'TCP / Raw');
-		o.default = 'xhttp';
+		no = s_node.option(form.ListValue, 'transport', _('Transport'));
+		no.value('xhttp', 'XHTTP');
+		no.value('ws', 'WebSocket');
+		no.value('httpupgrade', 'HTTPUpgrade');
+		no.value('grpc', 'gRPC');
+		no.value('tcp', 'TCP / Raw');
+		no.default = 'xhttp';
 
-		o = s.option(form.ListValue, 'security', _('Security'));
-		o.value('tls', 'TLS');
-		o.value('reality', 'REALITY');
-		o.value('none', 'None');
-		o.default = 'tls';
+		no = s_node.option(form.ListValue, 'security', _('Security'));
+		no.value('tls', 'TLS');
+		no.value('reality', 'REALITY');
+		no.value('none', 'None');
+		no.default = 'tls';
 
 		// Node Diagnostics & Latency Tests (Ping, TCPing, URL Test) - Passwall2 Style
-		o = s.option(form.DummyValue, '_ping', _('Ping'));
-		o.modalonly = false;
-		o.textvalue = function(section_id) {
+		no = s_node.option(form.DummyValue, '_ping', _('Ping'));
+		no.modalonly = false;
+		no.textvalue = function(section_id) {
 			return createTestLink('ping', section_id);
 		};
-		o.cfgvalue = o.textvalue;
+		no.cfgvalue = no.textvalue;
 
-		o = s.option(form.DummyValue, '_tcping', _('TCPing'));
-		o.modalonly = false;
-		o.textvalue = function(section_id) {
+		no = s_node.option(form.DummyValue, '_tcping', _('TCPing'));
+		no.modalonly = false;
+		no.textvalue = function(section_id) {
 			return createTestLink('tcping', section_id);
 		};
-		o.cfgvalue = o.textvalue;
+		no.cfgvalue = no.textvalue;
 
-		o = s.option(form.DummyValue, '_urltest', _('URL Test'));
-		o.modalonly = false;
-		o.textvalue = function(section_id) {
+		no = s_node.option(form.DummyValue, '_urltest', _('URL Test'));
+		no.modalonly = false;
+		no.textvalue = function(section_id) {
 			return createTestLink('urltest', section_id);
 		};
-		o.cfgvalue = o.textvalue;
+		no.cfgvalue = no.textvalue;
 
 		// Modal options for editing node details
-		o = s.option(form.TextValue, 'raw_link', _('Or Paste Share Link (vless://...)'));
-		o.modalonly = true;
-		o.rows = 4;
-		o.placeholder = 'vless://uuid@host:port?type=xhttp...';
+		no = s_node.option(form.TextValue, 'raw_link', _('Or Paste Share Link (vless://...)'));
+		no.modalonly = true;
+		no.rows = 4;
+		no.placeholder = 'vless://uuid@host:port?type=xhttp...';
 
-		o = s.option(form.Value, 'uuid', _('UUID / User ID'));
-		o.modalonly = true;
-		o.placeholder = '00000000-0000-0000-0000-000000000000';
+		no = s_node.option(form.Value, 'uuid', _('UUID / User ID'));
+		no.modalonly = true;
+		no.placeholder = '00000000-0000-0000-0000-000000000000';
 
-		o = s.option(form.Value, 'path', _('Path'));
-		o.modalonly = true;
-		o.default = '/';
+		no = s_node.option(form.Value, 'path', _('Path'));
+		no.modalonly = true;
+		no.default = '/';
 
-		o = s.option(form.Value, 'sni', _('SNI / ServerName'));
-		o.modalonly = true;
-		o.placeholder = 'example.com';
+		no = s_node.option(form.Value, 'sni', _('SNI / ServerName'));
+		no.modalonly = true;
+		no.placeholder = 'example.com';
 
-		o = s.option(form.Value, 'fp', _('Fingerprint'));
-		o.modalonly = true;
-		o.default = 'chrome';
+		no = s_node.option(form.Value, 'fp', _('Fingerprint'));
+		no.modalonly = true;
+		no.default = 'chrome';
 
-		// 4. Routing Rule Groups (Passwall2 Style Shunting)
-		s = m.section(form.GridSection, 'rule_group', _('Routing Rule Groups (Shunting)'),
+		// --- Tab 3: Routing Rule Groups (Inside dedicated tab) ---
+		o = s.taboption('rules', form.SectionValue, '_rules', form.GridSection, 'rule_group', _('Routing Rule Groups (Shunting)'),
 			_('Configure rule groups and assign specific outbound nodes or direct bypass to each group.'));
-		s.addremove = true;
-		s.anonymous = false;
-		s.sortable = true;
+		var s_rule = o.subsection;
+		s_rule.addremove = true;
+		s_rule.anonymous = false;
+		s_rule.sortable = true;
 
-		o = s.option(form.Flag, 'enabled', _('Enable'));
-		o.default = '1';
-		o.rmempty = false;
+		var ro;
+		ro = s_rule.option(form.Flag, 'enabled', _('Enable'));
+		ro.default = '1';
+		ro.rmempty = false;
 
-		o = s.option(form.Value, 'remarks', _('Group Name / Remark'));
-		o.placeholder = 'My Rule Group';
+		ro = s_rule.option(form.Value, 'remarks', _('Group Name / Remark'));
+		ro.placeholder = 'My Rule Group';
 
-		o = s.option(form.ListValue, 'target_node', _('Target Node'));
-		o.value('_direct', _('Direct (Bypass Proxy)'));
-		o.value('_default', _('Default Active Node (Proxy)'));
-		o.value('_block', _('Block (Blackhole)'));
+		ro = s_rule.option(form.ListValue, 'target_node', _('Target Node'));
+		ro.value('_direct', _('Direct (Bypass Proxy)'));
+		ro.value('_default', _('Default Active Node (Proxy)'));
+		ro.value('_block', _('Block (Blackhole)'));
 		nodes.forEach(function(node) {
 			var label = (node.remark || node['.name']);
-			o.value(node['.name'], _('Node: ') + label);
+			ro.value(node['.name'], _('Node: ') + label);
 		});
-		o.default = '_default';
+		ro.default = '_default';
 
-		o = s.option(form.ListValue, 'network', _('Network'));
-		o.value('tcp,udp', 'TCP + UDP');
-		o.value('tcp', 'TCP Only');
-		o.value('udp', 'UDP Only');
-		o.default = 'tcp,udp';
+		ro = s_rule.option(form.ListValue, 'network', _('Network'));
+		ro.value('tcp,udp', 'TCP + UDP');
+		ro.value('tcp', 'TCP Only');
+		ro.value('udp', 'UDP Only');
+		ro.default = 'tcp,udp';
 
-		o = s.option(form.DynamicList, 'domain_list', _('Domain Matchers'));
-		o.modalonly = true;
-		o.placeholder = 'geosite:ir';
-		o.description = _('Domains, geosite rules (e.g. geosite:ir, geosite:youtube), or regex (e.g. regexp:.*google.*).');
+		ro = s_rule.option(form.DynamicList, 'domain_list', _('Domain Matchers'));
+		ro.modalonly = true;
+		ro.placeholder = 'geosite:ir';
+		ro.description = _('Domains, geosite rules (e.g. geosite:ir, geosite:youtube), or regex (e.g. regexp:.*google.*).');
 
-		o = s.option(form.DynamicList, 'ip_list', _('IP Matchers'));
-		o.modalonly = true;
-		o.placeholder = 'geoip:ir';
-		o.description = _('IP CIDRs (e.g. 1.2.3.0/24) or geoip rules (e.g. geoip:ir, geoip:telegram).');
+		ro = s_rule.option(form.DynamicList, 'ip_list', _('IP Matchers'));
+		ro.modalonly = true;
+		ro.placeholder = 'geoip:ir';
+		ro.description = _('IP CIDRs (e.g. 1.2.3.0/24) or geoip rules (e.g. geoip:ir, geoip:telegram).');
 
-		o = s.option(form.Value, 'port', _('Port / Range'));
-		o.modalonly = true;
-		o.placeholder = '80,443';
+		ro = s_rule.option(form.Value, 'port', _('Port / Range'));
+		ro.modalonly = true;
+		ro.placeholder = '80,443';
 
 		return m.render();
 	}
