@@ -1,6 +1,6 @@
 include $(TOPDIR)/rules.mk
 
-LUCI_TITLE:=LuCI support for Xray-Rust client
+LUCI_TITLE:=LuCI support for LiteWall (Xray-Rust proxy client)
 LUCI_DEPENDS:=+luci-base +lua +luci-lib-jsonc
 LUCI_PKGARCH:=all
 

@@ -1,6 +1,6 @@
 {
 	"admin/services/xray-rust": {
-		"title": "Xray Rust",
+		"title": "LiteWall",
 		"order": 95,
 		"action": {
 			"type": "view",

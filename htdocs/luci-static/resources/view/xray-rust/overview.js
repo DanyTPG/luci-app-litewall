@@ -94,8 +94,8 @@ return view.extend({
 
 		var m, s, o;
 
-		m = new form.Map('xray-rust', _('Xray Rust Client'),
-			_('High-performance, ultra-low-memory (6.5 MB RSS) Xray proxy client with transparent routing, node diagnostics, and shunt rules.'));
+		m = new form.Map('xray-rust', _('LiteWall'),
+			_('High-performance, ultra-low-memory proxy client with transparent routing, node diagnostics, and kernel fast-path shunting.'));
 
 		// 1. Status Section
 		s = m.section(form.NamedSection, 'main', 'main', _('System & Service Status'));
