@@ -70,6 +70,66 @@ function createTestLink(type, section_id) {
 	}, _('Test'));
 }
 
+function parseVlessUrl(url) {
+	url = (url || '').trim();
+	if (url.indexOf('vless://') !== 0) return null;
+	try {
+		var cleanUrl = url.substring(8);
+		var hashIdx = cleanUrl.indexOf('#');
+		var remark = '';
+		if (hashIdx !== -1) {
+			remark = decodeURIComponent(cleanUrl.substring(hashIdx + 1));
+			cleanUrl = cleanUrl.substring(0, hashIdx);
+		}
+		var atIdx = cleanUrl.indexOf('@');
+		if (atIdx === -1) return null;
+		var uuid = cleanUrl.substring(0, atIdx);
+		var rest = cleanUrl.substring(atIdx + 1);
+
+		var qIdx = rest.indexOf('?');
+		var hostPort = qIdx !== -1 ? rest.substring(0, qIdx) : rest;
+		var query = qIdx !== -1 ? rest.substring(qIdx + 1) : '';
+
+		var colonIdx = hostPort.lastIndexOf(':');
+		var server = colonIdx !== -1 ? hostPort.substring(0, colonIdx) : hostPort;
+		var port = colonIdx !== -1 ? hostPort.substring(colonIdx + 1) : '443';
+
+		var params = {};
+		if (query) {
+			var pairs = query.split('&');
+			for (var i = 0; i < pairs.length; i++) {
+				var p = pairs[i].split('=');
+				if (p.length === 2) {
+					params[decodeURIComponent(p[0])] = decodeURIComponent(p[1]);
+				}
+			}
+		}
+
+		return {
+			uuid: uuid,
+			server: server,
+			port: port,
+			remark: remark,
+			transport: params.type || params.network || 'xhttp',
+			security: params.security || 'tls',
+			sni: params.sni || '',
+			fp: params.fp || 'chrome',
+			alpn: params.alpn || '',
+			pbk: params.pbk || '',
+			sid: params.sid || '',
+			spx: params.spx || '',
+			path: params.path || '/',
+			xhttp_host: params.host || '',
+			xhttp_mode: params.mode || 'auto',
+			extra: params.extra || '',
+			flow: params.flow || '',
+			encryption: params.encryption || 'none'
+		};
+	} catch (e) {
+		return null;
+	}
+}
+
 return view.extend({
 	load: function() {
 		return Promise.all([
@@ -309,6 +369,60 @@ return view.extend({
 		s_node.sortable = true;
 
 		var no;
+
+		// 1. Share link at top of modal (Priority & Auto-Fill)
+		no = s_node.option(form.TextValue, 'raw_link', _('VLESS Share Link (Priority / Auto-Fill)'));
+		no.modalonly = true;
+		no.rows = 4;
+		no.placeholder = 'vless://uuid@host:port?type=xhttp&security=tls...';
+		no.description = _('Pasting a vless:// URL here automatically extracts and fills all node fields below. If kept filled in, this share link takes highest priority.');
+		no.renderWidget = function(section_id, option_index, cfgvalue) {
+			var widget = form.TextValue.prototype.renderWidget.apply(this, [section_id, option_index, cfgvalue]);
+			var textarea = widget.querySelector ? (widget.querySelector('textarea') || widget) : widget;
+
+			function handleAutoFill(val) {
+				var parsed = parseVlessUrl(val);
+				if (!parsed) return;
+				function setVal(name, v) {
+					if (v === undefined || v === null || v === '') return;
+					var el = document.getElementById('widget.cbid.xray-rust.' + section_id + '.' + name) ||
+					         document.getElementById('cbid.xray-rust.' + section_id + '.' + name);
+					if (el) {
+						el.value = v;
+						el.dispatchEvent(new Event('input', { bubbles: true }));
+						el.dispatchEvent(new Event('change', { bubbles: true }));
+					}
+				}
+				if (parsed.remark) setVal('remark', parsed.remark);
+				if (parsed.server) setVal('server', parsed.server);
+				if (parsed.port) setVal('port', parsed.port);
+				if (parsed.uuid) setVal('uuid', parsed.uuid);
+				if (parsed.transport) setVal('transport', parsed.transport);
+				if (parsed.security) setVal('security', parsed.security);
+				if (parsed.sni) setVal('sni', parsed.sni);
+				if (parsed.fp) setVal('fp', parsed.fp);
+				if (parsed.alpn) setVal('alpn', parsed.alpn);
+				if (parsed.pbk) setVal('pbk', parsed.pbk);
+				if (parsed.sid) setVal('sid', parsed.sid);
+				if (parsed.spx) setVal('spx', parsed.spx);
+				if (parsed.path) setVal('path', parsed.path);
+				if (parsed.xhttp_host) setVal('xhttp_host', parsed.xhttp_host);
+				if (parsed.xhttp_mode) setVal('xhttp_mode', parsed.xhttp_mode);
+				if (parsed.extra) setVal('extra', parsed.extra);
+				if (parsed.flow) setVal('flow', parsed.flow);
+				if (parsed.encryption) setVal('encryption', parsed.encryption);
+			}
+
+			textarea.addEventListener('input', function() {
+				handleAutoFill(this.value);
+			});
+			textarea.addEventListener('change', function() {
+				handleAutoFill(this.value);
+			});
+
+			return widget;
+		};
+
 		no = s_node.option(form.Value, 'remark', _('Remark / Name'));
 		no.placeholder = 'My VLESS Server';
 
@@ -360,27 +474,113 @@ return view.extend({
 		};
 		no.cfgvalue = no.textvalue;
 
-		// Modal options for editing node details
-		no = s_node.option(form.TextValue, 'raw_link', _('Or Paste Share Link (vless://...)'));
-		no.modalonly = true;
-		no.rows = 4;
-		no.placeholder = 'vless://uuid@host:port?type=xhttp...';
-
+		// Modal options for VLESS Authentication
 		no = s_node.option(form.Value, 'uuid', _('UUID / User ID'));
 		no.modalonly = true;
 		no.placeholder = '00000000-0000-0000-0000-000000000000';
 
+		no = s_node.option(form.ListValue, 'flow', _('Flow'));
+		no.modalonly = true;
+		no.value('', _('None'));
+		no.value('xtls-rprx-vision', 'xtls-rprx-vision');
+		no.default = '';
+
+		no = s_node.option(form.Value, 'encryption', _('Encryption'));
+		no.modalonly = true;
+		no.default = 'none';
+
+		// Modal options for XHTTP Transport
 		no = s_node.option(form.Value, 'path', _('Path'));
 		no.modalonly = true;
 		no.default = '/';
+		no.depends('transport', 'xhttp');
+		no.depends('transport', 'ws');
+		no.depends('transport', 'httpupgrade');
 
+		no = s_node.option(form.Value, 'xhttp_host', _('HTTP Host Header'));
+		no.modalonly = true;
+		no.placeholder = 'example.com';
+		no.description = _('HTTP Host header. Defaults to SNI if empty.');
+		no.depends('transport', 'xhttp');
+		no.depends('transport', 'ws');
+		no.depends('transport', 'httpupgrade');
+
+		no = s_node.option(form.ListValue, 'xhttp_mode', _('XHTTP Mode'));
+		no.modalonly = true;
+		no.value('auto', 'auto (SplitHTTP stream-up / packet-up)');
+		no.value('stream-up', 'stream-up (HTTP/2 full duplex stream)');
+		no.value('stream-one', 'stream-one (HTTP/2 single stream)');
+		no.value('packet-up', 'packet-up (POST chunked packets)');
+		no.default = 'auto';
+		no.depends('transport', 'xhttp');
+
+		no = s_node.option(form.TextValue, 'extra', _('XHTTP Extra Parameters (JSON)'));
+		no.modalonly = true;
+		no.rows = 2;
+		no.placeholder = '{"scMaxEachPostBytes": 32768, "scMinPostsIntervalMs": 30}';
+		no.description = _('JSON payload for advanced XHTTP tuning (e.g. scMaxEachPostBytes, scMinPostsIntervalMs, xPaddingBytes, noSSEHeader).');
+		no.depends('transport', 'xhttp');
+
+		no = s_node.option(form.Flag, 'xhttp_xmux', _('XHTTP XMUX Multiplexing'));
+		no.modalonly = true;
+		no.default = '0';
+		no.description = _('Enable client-side XMUX multiplexing for XHTTP streams.');
+		no.depends('transport', 'xhttp');
+
+		no = s_node.option(form.DynamicList, 'xhttp_headers', _('Custom HTTP Headers'));
+		no.modalonly = true;
+		no.placeholder = 'Header-Name: Value';
+		no.description = _('Custom HTTP headers sent with XHTTP requests (e.g. User-Agent: Mozilla/5.0).');
+		no.depends('transport', 'xhttp');
+
+		// Modal options for TLS / REALITY Security
 		no = s_node.option(form.Value, 'sni', _('SNI / ServerName'));
 		no.modalonly = true;
 		no.placeholder = 'example.com';
+		no.depends('security', 'tls');
+		no.depends('security', 'reality');
 
-		no = s_node.option(form.Value, 'fp', _('Fingerprint'));
+		no = s_node.option(form.Value, 'alpn', _('ALPN'));
 		no.modalonly = true;
+		no.default = 'h2,http/1.1';
+		no.placeholder = 'h2,http/1.1';
+		no.description = _('Application-Layer Protocol Negotiation list (comma-separated).');
+		no.depends('security', 'tls');
+		no.depends('security', 'reality');
+
+		no = s_node.option(form.ListValue, 'fp', _('Fingerprint (uTLS)'));
+		no.modalonly = true;
+		no.value('chrome', 'Chrome');
+		no.value('firefox', 'Firefox');
+		no.value('safari', 'Safari');
+		no.value('edge', 'Edge');
+		no.value('ios', 'iOS');
+		no.value('android', 'Android');
+		no.value('random', 'Random');
+		no.value('randomized', 'Randomized');
 		no.default = 'chrome';
+		no.depends('security', 'tls');
+		no.depends('security', 'reality');
+
+		no = s_node.option(form.Flag, 'allow_insecure', _('Allow Insecure (Skip TLS Verify)'));
+		no.modalonly = true;
+		no.default = '0';
+		no.depends('security', 'tls');
+
+		no = s_node.option(form.Value, 'pbk', _('REALITY Public Key'));
+		no.modalonly = true;
+		no.placeholder = 'REALITY Public Key (pbk)';
+		no.depends('security', 'reality');
+
+		no = s_node.option(form.Value, 'sid', _('REALITY Short ID'));
+		no.modalonly = true;
+		no.placeholder = 'Short ID (sid)';
+		no.depends('security', 'reality');
+
+		no = s_node.option(form.Value, 'spx', _('REALITY SpiderX Path'));
+		no.modalonly = true;
+		no.placeholder = '/';
+		no.depends('security', 'reality');
 
 		// --- Tab 3: Routing Rule Groups (Inside dedicated tab) ---
 		o = s.taboption('rules', form.SectionValue, '_rules', form.GridSection, 'rule_group', _('Routing Rule Groups (Shunting)'),

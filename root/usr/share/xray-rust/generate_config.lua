@@ -106,25 +106,52 @@ local function get_node_data(node_id, socks_port)
         local uuid = node_sec.uuid
         local transport = node_sec.transport or "xhttp"
         local security = node_sec.security or "tls"
-        local sni = node_sec.sni or server
+        local sni = (node_sec.sni and node_sec.sni ~= "") and node_sec.sni or server
         local fp = node_sec.fp or "chrome"
         local path = node_sec.path or "/"
-        local mode = node_sec.mode or "auto"
+        local mode = node_sec.xhttp_mode or node_sec.mode or "auto"
+        local flow = node_sec.flow or ""
+        local encryption = node_sec.encryption or "none"
+
+        local alpn_list = {}
+        if node_sec.alpn and node_sec.alpn ~= "" then
+            for a in node_sec.alpn:gmatch("[^,]+") do
+                table.insert(alpn_list, (a:gsub("^%s*(.-)%s*$", "%1")))
+            end
+        else
+            alpn_list = {"h2", "http/1.1"}
+        end
 
         local stream_settings = { network = transport, security = security }
         if security == "tls" then
-            stream_settings.tlsSettings = { serverName = sni, fingerprint = fp, alpn = {"h2", "http/1.1"} }
+            local tls_settings = {
+                serverName = sni,
+                fingerprint = fp,
+                alpn = alpn_list
+            }
+            if node_sec.allow_insecure == "1" then
+                tls_settings.allowInsecure = true
+            end
+            stream_settings.tlsSettings = tls_settings
         elseif security == "reality" then
             stream_settings.realitySettings = {
                 serverName = sni,
                 fingerprint = fp,
                 publicKey = node_sec.pbk or "",
-                shortId = node_sec.sid or ""
+                shortId = node_sec.sid or "",
+                spiderX = node_sec.spx or ""
             }
         end
-        if transport == "xhttp" then
+
+        if transport == "xhttp" or transport == "splithttp" then
             local h2_window = tonumber(uci:get("xray-rust", "main", "h2_window")) or 262144
-            local xhttp_settings = { host = sni, path = path, mode = mode, h2StreamReceiveWindow = h2_window }
+            local xhttp_host = (node_sec.xhttp_host and node_sec.xhttp_host ~= "") and node_sec.xhttp_host or sni
+            local xhttp_settings = {
+                host = xhttp_host,
+                path = path,
+                mode = mode,
+                h2StreamReceiveWindow = h2_window
+            }
             if node_sec.extra and node_sec.extra ~= "" then
                 local node_extra = json.parse(node_sec.extra)
                 if node_extra and type(node_extra) == "table" then
@@ -138,13 +165,42 @@ local function get_node_data(node_id, socks_port)
                     xhttp_settings.extra = node_extra
                 end
             end
+            if node_sec.xhttp_xmux == "1" then
+                xhttp_settings.xmux = { maxConcurrency = 4, maxConnections = 2 }
+            end
+            if node_sec.xhttp_headers and type(node_sec.xhttp_headers) == "table" then
+                local hdr_obj = {}
+                for _, h in ipairs(node_sec.xhttp_headers) do
+                    local hk, hv = h:match("^([^:]+):%s*(.+)$")
+                    if hk and hv then hdr_obj[hk] = hv end
+                end
+                xhttp_settings.headers = hdr_obj
+            end
             stream_settings.xhttpSettings = xhttp_settings
+        elseif transport == "ws" or transport == "websocket" then
+            local ws_host = (node_sec.xhttp_host and node_sec.xhttp_host ~= "") and node_sec.xhttp_host or sni
+            stream_settings.wsSettings = {
+                path = path,
+                headers = { Host = ws_host }
+            }
+        elseif transport == "httpupgrade" then
+            local hu_host = (node_sec.xhttp_host and node_sec.xhttp_host ~= "") and node_sec.xhttp_host or sni
+            stream_settings.httpupgradeSettings = {
+                path = path,
+                host = hu_host
+            }
+        elseif transport == "grpc" then
+            stream_settings.grpcSettings = {
+                serviceName = path or ""
+            }
         end
+
         return {
             address = server,
             port = port,
             uuid = uuid,
-            encryption = "none",
+            encryption = encryption,
+            flow = flow,
             stream_settings = stream_settings
         }
     end
