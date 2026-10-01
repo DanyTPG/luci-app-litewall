@@ -95,7 +95,7 @@ jobs:
 
           # Build package
           mkdir -p bin
-          ./ipkg-build -m "0:0" "$PKG_DIR" bin/
+          ./ipkg-build "$PKG_DIR" bin/
           ls -la bin/
 
       - name: Upload IPK Artifact
