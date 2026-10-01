@@ -27,15 +27,14 @@ local function parse_vless(url, socks_port)
         end
     end
     
-    local extra_obj = nil
+    local max_post_bytes = tonumber(uci:get("xray-rust", "main", "max_post_bytes")) or 32768
+    local extra_obj = {}
     if params["extra"] then
-        extra_obj = json.parse(params["extra"])
-        if extra_obj and type(extra_obj) == "table" and extra_obj.scMaxEachPostBytes then
-            local max_post_bytes = tonumber(uci:get("xray-rust", "main", "max_post_bytes")) or 32768
-            local pb = tonumber(extra_obj.scMaxEachPostBytes)
-            if pb and pb > max_post_bytes then
-                extra_obj.scMaxEachPostBytes = tostring(max_post_bytes)
-            end
+        extra_obj = json.parse(params["extra"]) or {}
+    end
+    if type(extra_obj) == "table" then
+        if not extra_obj.scMaxEachPostBytes or (tonumber(extra_obj.scMaxEachPostBytes) and tonumber(extra_obj.scMaxEachPostBytes) > max_post_bytes) then
+            extra_obj.scMaxEachPostBytes = tostring(max_post_bytes)
         end
     end
     
@@ -180,18 +179,16 @@ local function get_node_data(node_id, socks_port)
                 mode = mode,
                 h2StreamReceiveWindow = h2_window
             }
+            local max_post_bytes = tonumber(uci:get("xray-rust", "main", "max_post_bytes")) or 32768
+            local node_extra = {}
             if node_sec.extra and node_sec.extra ~= "" then
-                local node_extra = json.parse(node_sec.extra)
-                if node_extra and type(node_extra) == "table" then
-                    local max_post_bytes = tonumber(uci:get("xray-rust", "main", "max_post_bytes")) or 32768
-                    if node_extra.scMaxEachPostBytes then
-                        local pb = tonumber(node_extra.scMaxEachPostBytes)
-                        if pb and pb > max_post_bytes then
-                            node_extra.scMaxEachPostBytes = tostring(max_post_bytes)
-                        end
-                    end
-                    xhttp_settings.extra = node_extra
+                node_extra = json.parse(node_sec.extra) or {}
+            end
+            if type(node_extra) == "table" then
+                if not node_extra.scMaxEachPostBytes or (tonumber(node_extra.scMaxEachPostBytes) and tonumber(node_extra.scMaxEachPostBytes) > max_post_bytes) then
+                    node_extra.scMaxEachPostBytes = tostring(max_post_bytes)
                 end
+                xhttp_settings.extra = node_extra
             end
             if node_sec.xhttp_xmux == "1" then
                 xhttp_settings.xmux = { maxConcurrency = 4, maxConnections = 2 }
