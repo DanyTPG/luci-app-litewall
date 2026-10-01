@@ -123,7 +123,16 @@ function parseVlessUrl(url) {
 			xhttp_mode: params.mode || 'auto',
 			extra: params.extra || '',
 			flow: params.flow || '',
-			encryption: params.encryption || 'none'
+			encryption: params.encryption || 'none',
+			grpc_service_name: params.serviceName || '',
+			grpc_authority: params.authority || '',
+			pinned_peer_cert: params.pinnedPeerCertSha256 || '',
+			verify_peer_cert: params.verifyPeerCertByName || '',
+			quic_congestion: params.congestion || '',
+			quic_bbr_profile: params.bbrProfile || '',
+			quic_brutal_up: params.brutalUp || '',
+			quic_brutal_down: params.brutalDown || '',
+			ws_early_data: params.ed || ''
 		};
 	} catch (e) {
 		return null;
@@ -411,6 +420,15 @@ return view.extend({
 				if (parsed.extra) setVal('extra', parsed.extra);
 				if (parsed.flow) setVal('flow', parsed.flow);
 				if (parsed.encryption) setVal('encryption', parsed.encryption);
+				if (parsed.grpc_service_name) setVal('grpc_service_name', parsed.grpc_service_name);
+				if (parsed.grpc_authority) setVal('grpc_authority', parsed.grpc_authority);
+				if (parsed.pinned_peer_cert) setVal('pinned_peer_cert', parsed.pinned_peer_cert);
+				if (parsed.verify_peer_cert) setVal('verify_peer_cert', parsed.verify_peer_cert);
+				if (parsed.quic_congestion) setVal('quic_congestion', parsed.quic_congestion);
+				if (parsed.quic_bbr_profile) setVal('quic_bbr_profile', parsed.quic_bbr_profile);
+				if (parsed.quic_brutal_up) setVal('quic_brutal_up', parsed.quic_brutal_up);
+				if (parsed.quic_brutal_down) setVal('quic_brutal_down', parsed.quic_brutal_down);
+				if (parsed.ws_early_data) setVal('ws_early_data', parsed.ws_early_data);
 			}
 
 			textarea.addEventListener('input', function() {
@@ -567,6 +585,18 @@ return view.extend({
 		no.default = '0';
 		no.depends('security', 'tls');
 
+		no = s_node.option(form.Value, 'pinned_peer_cert', _('Pinned Peer Cert SHA-256'));
+		no.modalonly = true;
+		no.placeholder = 'SHA-256 fingerprint in hex';
+		no.description = _('Pin complete DER-encoded server certificate SHA-256 hash.');
+		no.depends('security', 'tls');
+
+		no = s_node.option(form.Value, 'verify_peer_cert', _('Verify Peer Cert By Name'));
+		no.modalonly = true;
+		no.placeholder = 'example.com';
+		no.description = _('Alternative certificate verification names (SAN list).');
+		no.depends('security', 'tls');
+
 		no = s_node.option(form.Value, 'pbk', _('REALITY Public Key'));
 		no.modalonly = true;
 		no.placeholder = 'REALITY Public Key (pbk)';
@@ -581,6 +611,144 @@ return view.extend({
 		no.modalonly = true;
 		no.placeholder = '/';
 		no.depends('security', 'reality');
+
+		// Modal options for WebSocket Transport
+		no = s_node.option(form.Value, 'ws_early_data', _('WebSocket Early Data Max Bytes'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '2048';
+		no.description = _('Enables 0-RTT early data for WebSocket by appending ?ed=N to request path.');
+		no.depends('transport', 'ws');
+
+		no = s_node.option(form.Value, 'ws_early_data_header', _('WebSocket Early Data Header Name'));
+		no.modalonly = true;
+		no.placeholder = 'Sec-WebSocket-Protocol';
+		no.depends('transport', 'ws');
+
+		// Modal options for gRPC Transport
+		no = s_node.option(form.Value, 'grpc_service_name', _('gRPC Service Name'));
+		no.modalonly = true;
+		no.placeholder = 'GunService';
+		no.depends('transport', 'grpc');
+
+		no = s_node.option(form.Flag, 'grpc_multi_mode', _('gRPC Multi Mode'));
+		no.modalonly = true;
+		no.default = '0';
+		no.depends('transport', 'grpc');
+
+		no = s_node.option(form.Value, 'grpc_authority', _('gRPC Authority Header'));
+		no.modalonly = true;
+		no.placeholder = 'example.com';
+		no.depends('transport', 'grpc');
+
+		no = s_node.option(form.Value, 'grpc_idle_timeout', _('gRPC Idle Timeout (Seconds)'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '60';
+		no.default = '60';
+		no.depends('transport', 'grpc');
+
+		no = s_node.option(form.Value, 'grpc_health_check_timeout', _('gRPC Health Check Timeout (Seconds)'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '20';
+		no.default = '20';
+		no.depends('transport', 'grpc');
+
+		no = s_node.option(form.Value, 'grpc_initial_windows_size', _('gRPC Initial Window Size (Bytes)'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '1048576';
+		no.default = '1048576';
+		no.depends('transport', 'grpc');
+
+		// Modal options for QUIC / HTTP/3 Settings (when XHTTP connects via HTTP/3)
+		no = s_node.option(form.ListValue, 'quic_congestion', _('QUIC Congestion Algorithm'));
+		no.modalonly = true;
+		no.value('', _('Default (Cubic)'));
+		no.value('bbr', 'BBR');
+		no.value('brutal', 'TCP Brutal');
+		no.value('reno', 'Reno');
+		no.value('force-brutal', 'Force Brutal');
+		no.default = '';
+		no.description = _('QUIC congestion control algorithm used when XHTTP connects via HTTP/3.');
+		no.depends('transport', 'xhttp');
+
+		no = s_node.option(form.ListValue, 'quic_bbr_profile', _('QUIC BBR Profile'));
+		no.modalonly = true;
+		no.value('standard', 'Standard');
+		no.value('conservative', 'Conservative');
+		no.value('aggressive', 'Aggressive');
+		no.default = 'standard';
+		no.depends('quic_congestion', 'bbr');
+
+		no = s_node.option(form.Value, 'quic_brutal_up', _('QUIC Brutal Upload (Bytes/s)'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '1000000';
+		no.description = _('Brutal congestion upload bandwidth rate in bytes/sec (minimum 65536).');
+		no.depends('quic_congestion', 'brutal');
+		no.depends('quic_congestion', 'force-brutal');
+
+		no = s_node.option(form.Value, 'quic_brutal_down', _('QUIC Brutal Download (Bytes/s)'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '2000000';
+		no.description = _('Brutal congestion download bandwidth rate in bytes/sec (minimum 65536).');
+		no.depends('quic_congestion', 'brutal');
+		no.depends('quic_congestion', 'force-brutal');
+
+		no = s_node.option(form.Value, 'quic_udp_hop_ports', _('QUIC UDP Port Hopping'));
+		no.modalonly = true;
+		no.placeholder = '10000-20000';
+		no.description = _('Port range (e.g. 10000-20000) or comma-separated list of UDP ports for hop cycling.');
+		no.depends('transport', 'xhttp');
+
+		no = s_node.option(form.Value, 'quic_udp_hop_interval', _('QUIC UDP Hop Interval (Seconds)'));
+		no.modalonly = true;
+		no.placeholder = '5-10';
+		no.description = _('Seconds interval range between UDP port hops.');
+		no.depends('transport', 'xhttp');
+
+		// Modal options for Proxy Chaining & Socket Options
+		no = s_node.option(form.ListValue, 'proxy_node', _('Outbound Proxy Chaining'));
+		no.modalonly = true;
+		no.value('', _('None (Direct to Node)'));
+		nodes.forEach(function(node) {
+			var label = (node.remark || node['.name']);
+			no.value(node['.name'], _('Forward via: ') + label);
+		});
+		no.default = '';
+		no.description = _('Route traffic for this node through another node before reaching the internet (chaining).');
+
+		no = s_node.option(form.Flag, 'transport_layer', _('Chain on Transport Layer (TCP/TLS)'));
+		no.modalonly = true;
+		no.default = '0';
+		no.description = _('Forward the raw transport connection (TCP/TLS) through the middle node instead of unpacking application payload.');
+
+		no = s_node.option(form.Flag, 'happy_eyeballs', _('Happy Eyeballs (Dual-Stack Racing)'));
+		no.modalonly = true;
+		no.default = '0';
+		no.description = _('Enables parallel IPv4 and IPv6 connection attempts for optimal connection establishment latency.');
+
+		no = s_node.option(form.Flag, 'he_prioritize_ipv6', _('Happy Eyeballs: Prioritize IPv6'));
+		no.modalonly = true;
+		no.default = '0';
+		no.depends('happy_eyeballs', '1');
+
+		no = s_node.option(form.Value, 'he_try_delay', _('Happy Eyeballs: Try Delay (ms)'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '250';
+		no.default = '250';
+		no.depends('happy_eyeballs', '1');
+
+		no = s_node.option(form.Value, 'he_max_concurrent_try', _('Happy Eyeballs: Max Concurrent Tries'));
+		no.modalonly = true;
+		no.datatype = 'uinteger';
+		no.placeholder = '4';
+		no.default = '4';
+		no.depends('happy_eyeballs', '1');
 
 		// --- Tab 3: Routing Rule Groups (Inside dedicated tab) ---
 		o = s.taboption('rules', form.SectionValue, '_rules', form.GridSection, 'rule_group', _('Routing Rule Groups (Shunting)'),

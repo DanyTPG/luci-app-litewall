@@ -50,6 +50,15 @@ local function parse_vless(url, socks_port)
             fingerprint = params["fp"] or "chrome",
             alpn = #alpn_list > 0 and alpn_list or {"h2", "http/1.1"}
         }
+        if params["pinnedPeerCertSha256"] then
+            stream_settings.tlsSettings.pinnedPeerCertSha256 = params["pinnedPeerCertSha256"]
+        end
+        if params["verifyPeerCertByName"] then
+            stream_settings.tlsSettings.verifyPeerCertByName = params["verifyPeerCertByName"]
+        end
+        if params["allowInsecure"] == "1" or params["allowInsecure"] == "true" then
+            stream_settings.tlsSettings.allowInsecure = true
+        end
     elseif stream_settings.security == "reality" then
         stream_settings.realitySettings = {
             serverName = params["sni"] or host,
@@ -132,6 +141,12 @@ local function get_node_data(node_id, socks_port)
             if node_sec.allow_insecure == "1" then
                 tls_settings.allowInsecure = true
             end
+            if node_sec.pinned_peer_cert and node_sec.pinned_peer_cert ~= "" then
+                tls_settings.pinnedPeerCertSha256 = node_sec.pinned_peer_cert
+            end
+            if node_sec.verify_peer_cert and node_sec.verify_peer_cert ~= "" then
+                tls_settings.verifyPeerCertByName = node_sec.verify_peer_cert
+            end
             stream_settings.tlsSettings = tls_settings
         elseif security == "reality" then
             stream_settings.realitySettings = {
@@ -140,6 +155,19 @@ local function get_node_data(node_id, socks_port)
                 publicKey = node_sec.pbk or "",
                 shortId = node_sec.sid or "",
                 spiderX = node_sec.spx or ""
+            }
+        end
+
+        if node_sec.happy_eyeballs == "1" then
+            local delay = tonumber(node_sec.he_try_delay) or 250
+            local max_try = tonumber(node_sec.he_max_concurrent_try) or 4
+            stream_settings.sockopt = {
+                happyEyeballs = {
+                    prioritizeIPv6 = (node_sec.he_prioritize_ipv6 == "1"),
+                    interleave = 1,
+                    tryDelayMs = delay,
+                    maxConcurrentTry = max_try
+                }
             }
         end
 
@@ -177,12 +205,46 @@ local function get_node_data(node_id, socks_port)
                 xhttp_settings.headers = hdr_obj
             end
             stream_settings.xhttpSettings = xhttp_settings
+
+            if node_sec.quic_congestion and node_sec.quic_congestion ~= "" and node_sec.quic_congestion ~= "default" then
+                local qp = {
+                    congestion = node_sec.quic_congestion
+                }
+                if node_sec.quic_congestion == "bbr" and node_sec.quic_bbr_profile and node_sec.quic_bbr_profile ~= "" then
+                    qp.bbrProfile = node_sec.quic_bbr_profile
+                end
+                if node_sec.quic_brutal_up and tonumber(node_sec.quic_brutal_up) then
+                    qp.brutalUp = tonumber(node_sec.quic_brutal_up)
+                end
+                if node_sec.quic_brutal_down and tonumber(node_sec.quic_brutal_down) then
+                    qp.brutalDown = tonumber(node_sec.quic_brutal_down)
+                end
+                if node_sec.quic_udp_hop_ports and node_sec.quic_udp_hop_ports ~= "" then
+                    qp.udpHop = {
+                        ports = node_sec.quic_udp_hop_ports,
+                        interval = (node_sec.quic_udp_hop_interval and node_sec.quic_udp_hop_interval ~= "") and node_sec.quic_udp_hop_interval or "5-10"
+                    }
+                end
+                stream_settings.finalmask = { quicParams = qp }
+            end
         elseif transport == "ws" or transport == "websocket" then
             local ws_host = (node_sec.xhttp_host and node_sec.xhttp_host ~= "") and node_sec.xhttp_host or sni
-            stream_settings.wsSettings = {
-                path = path,
+            local ws_path = path
+            if node_sec.ws_early_data and node_sec.ws_early_data ~= "" then
+                local ed = tonumber(node_sec.ws_early_data)
+                if ed and not ws_path:find("ed=") then
+                    local sep = ws_path:find("%?") and "&" or "?"
+                    ws_path = ws_path .. sep .. "ed=" .. ed
+                end
+            end
+            local ws_settings = {
+                path = ws_path,
                 headers = { Host = ws_host }
             }
+            if node_sec.ws_early_data_header and node_sec.ws_early_data_header ~= "" then
+                ws_settings.earlyDataHeaderName = node_sec.ws_early_data_header
+            end
+            stream_settings.wsSettings = ws_settings
         elseif transport == "httpupgrade" then
             local hu_host = (node_sec.xhttp_host and node_sec.xhttp_host ~= "") and node_sec.xhttp_host or sni
             stream_settings.httpupgradeSettings = {
@@ -190,8 +252,31 @@ local function get_node_data(node_id, socks_port)
                 host = hu_host
             }
         elseif transport == "grpc" then
-            stream_settings.grpcSettings = {
-                serviceName = path or ""
+            local grpc_settings = {
+                serviceName = (node_sec.grpc_service_name and node_sec.grpc_service_name ~= "") and node_sec.grpc_service_name or path,
+                multiMode = (node_sec.grpc_multi_mode == "1")
+            }
+            if node_sec.grpc_authority and node_sec.grpc_authority ~= "" then
+                grpc_settings.authority = node_sec.grpc_authority
+            end
+            if node_sec.grpc_idle_timeout and tonumber(node_sec.grpc_idle_timeout) then
+                grpc_settings.idle_timeout = tonumber(node_sec.grpc_idle_timeout)
+            end
+            if node_sec.grpc_health_check_timeout and tonumber(node_sec.grpc_health_check_timeout) then
+                grpc_settings.health_check_timeout = tonumber(node_sec.grpc_health_check_timeout)
+            end
+            if node_sec.grpc_initial_windows_size and tonumber(node_sec.grpc_initial_windows_size) then
+                grpc_settings.initial_windows_size = tonumber(node_sec.grpc_initial_windows_size)
+            end
+            stream_settings.grpcSettings = grpc_settings
+        end
+
+        local proxy_node = node_sec.proxy_node
+        local proxy_settings = nil
+        if proxy_node and proxy_node ~= "" then
+            proxy_settings = {
+                tag = proxy_node,
+                transportLayer = (node_sec.transport_layer == "1")
             }
         end
 
@@ -201,13 +286,15 @@ local function get_node_data(node_id, socks_port)
             uuid = uuid,
             encryption = encryption,
             flow = flow,
+            proxy_settings = proxy_settings,
+            proxy_node = proxy_node,
             stream_settings = stream_settings
         }
     end
 end
 
 local function build_outbound(tag, node_data)
-    return {
+    local ob = {
         tag = tag,
         protocol = "vless",
         settings = {
@@ -227,6 +314,14 @@ local function build_outbound(tag, node_data)
         },
         streamSettings = node_data.stream_settings
     }
+    if node_data.proxy_settings then
+        local ps = {
+            tag = (node_data.proxy_settings.tag == active_node) and "proxy" or node_data.proxy_settings.tag,
+            transportLayer = node_data.proxy_settings.transportLayer or false
+        }
+        ob.proxySettings = ps
+    end
+    return ob
 end
 
 local socks_port = tonumber(arg[3]) or tonumber(uci:get("xray-rust", "main", "socks_port")) or 10808
@@ -295,6 +390,21 @@ uci:foreach("xray-rust", "rule_group", function(rg)
         end
     end
 end)
+
+-- Recursively resolve chained proxy nodes
+local chain_added = true
+while chain_added do
+    chain_added = false
+    for _, nd in pairs(needed_nodes) do
+        if nd.proxy_node and nd.proxy_node ~= "" and not needed_nodes[nd.proxy_node] then
+            local chained_nd = get_node_data(nd.proxy_node, socks_port)
+            if chained_nd then
+                needed_nodes[nd.proxy_node] = chained_nd
+                chain_added = true
+            end
+        end
+    end
+end
 
 -- Record server IPs (resolved) and hostnames to bypass loops in nftables and dnsmasq
 local nixio = require("nixio")
