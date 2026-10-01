@@ -26,7 +26,11 @@ jobs:
       - name: Extract package version
         id: pkg_info
         run: |
-          VERSION=$(grep -E '^PKG_VERSION:=' Makefile | cut -d= -f2 | tr -d ' ')
+          if [[ "${{ github.ref }}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF_NAME#v}"
+          else
+            VERSION=$(grep -E '^PKG_VERSION:=' Makefile | cut -d= -f2 | tr -d ' ')
+          fi
           RELEASE=$(grep -E '^PKG_RELEASE:=' Makefile | cut -d= -f2 | tr -d ' ')
           PKG_NAME=$(grep -E '^PKG_NAME:=' Makefile | cut -d= -f2 | tr -d ' ')
           FULL_VER="${VERSION}-${RELEASE}"
@@ -36,19 +40,12 @@ jobs:
           echo "full_ver=${FULL_VER}" >> $GITHUB_OUTPUT
           echo "Building ${PKG_NAME} version ${FULL_VER}"
 
-      - name: Set up OpenWrt ipkg-build
-        run: |
-          wget -q https://raw.githubusercontent.com/openwrt/openwrt/main/scripts/ipkg-build -O ipkg-build
-          chmod +x ipkg-build
-
-      - name: Assemble IPK payload
+      - name: Assemble and Build IPK Package
         run: |
           PKG_DIR="ipk_stage"
-          rm -rf "$PKG_DIR"
-          mkdir -p "$PKG_DIR/CONTROL"
-          mkdir -p "$PKG_DIR/etc"
-          mkdir -p "$PKG_DIR/usr"
-          mkdir -p "$PKG_DIR/www"
+          BUILD_TMP="build_tmp"
+          rm -rf "$PKG_DIR" "$BUILD_TMP" bin
+          mkdir -p "$PKG_DIR/CONTROL" "$PKG_DIR/etc" "$PKG_DIR/usr" "$PKG_DIR/www" "$BUILD_TMP" bin
 
           # Copy filesystem assets
           cp -r root/* "$PKG_DIR/"
@@ -93,10 +90,23 @@ jobs:
             > "$PKG_DIR/CONTROL/prerm"
           chmod +x "$PKG_DIR/CONTROL/prerm"
 
-          # Build package
-          mkdir -p bin
-          ./ipkg-build "$PKG_DIR" bin/
-          ls -la bin/
+          # 1. Pack data.tar.gz
+          (cd "$PKG_DIR" && tar --owner=0 --group=0 --numeric-owner --exclude=CONTROL -czf "../$BUILD_TMP/data.tar.gz" .)
+
+          # 2. Append Installed-Size to control and pack control.tar.gz
+          INSTALLED_SIZE=$(gzip -dc "$BUILD_TMP/data.tar.gz" | wc -c)
+          echo "Installed-Size: $INSTALLED_SIZE" >> "$PKG_DIR/CONTROL/control"
+          (cd "$PKG_DIR/CONTROL" && tar --owner=0 --group=0 --numeric-owner -czf "../../$BUILD_TMP/control.tar.gz" .)
+
+          # 3. Create debian-binary
+          echo "2.0" > "$BUILD_TMP/debian-binary"
+
+          # 4. Create final .ipk archive
+          IPK_FILE="bin/${{ steps.pkg_info.outputs.pkg_name }}_${{ steps.pkg_info.outputs.full_ver }}_all.ipk"
+          (cd "$BUILD_TMP" && tar --owner=0 --group=0 --numeric-owner -czf "../$IPK_FILE" ./debian-binary ./control.tar.gz ./data.tar.gz)
+
+          rm -rf "$PKG_DIR" "$BUILD_TMP"
+          ls -lh bin/
 
       - name: Upload IPK Artifact
         uses: actions/upload-artifact@v4
