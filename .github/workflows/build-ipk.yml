@@ -61,39 +61,36 @@ jobs:
           chmod +x "$PKG_DIR"/usr/share/xray-rust/*.lua
 
           # Control metadata file
-          cat << 'EOF' > "$PKG_DIR/CONTROL/control"
-          Package: ${{ steps.pkg_info.outputs.pkg_name }}
-          Version: ${{ steps.pkg_info.outputs.full_ver }}
-          Depends: luci-base, lua, luci-lib-jsonc, nftables, curl
-          Architecture: all
-          Maintainer: Dan
-          Section: luci
-          Priority: optional
-          Description: LuCI support for LiteWall (Xray-Rust transparent proxy client)
-          EOF
-          sed -i 's/^[ \t]*//' "$PKG_DIR/CONTROL/control"
+          printf "%s\n" \
+            "Package: ${{ steps.pkg_info.outputs.pkg_name }}" \
+            "Version: ${{ steps.pkg_info.outputs.full_ver }}" \
+            "Depends: luci-base, lua, luci-lib-jsonc, nftables, curl" \
+            "Architecture: all" \
+            "Maintainer: Dan" \
+            "Section: luci" \
+            "Priority: optional" \
+            "Description: LuCI support for LiteWall (Xray-Rust transparent proxy client)" \
+            > "$PKG_DIR/CONTROL/control"
 
           # Post-installation hook
-          cat << 'EOF' > "$PKG_DIR/CONTROL/postinst"
-          #!/bin/sh
-          [ -n "$IPKG_INSTROOT" ] || {
-              ( . /etc/uci-defaults/luci-app-xray-rust ) && rm -f /etc/uci-defaults/luci-app-xray-rust
-              exit 0
-          }
-          EOF
-          sed -i 's/^[ \t]*//' "$PKG_DIR/CONTROL/postinst"
+          printf "%s\n" \
+            "#!/bin/sh" \
+            '[ -n "$IPKG_INSTROOT" ] || {' \
+            '    ( . /etc/uci-defaults/luci-app-xray-rust ) && rm -f /etc/uci-defaults/luci-app-xray-rust' \
+            '    exit 0' \
+            '}' \
+            > "$PKG_DIR/CONTROL/postinst"
           chmod +x "$PKG_DIR/CONTROL/postinst"
 
           # Pre-removal hook
-          cat << 'EOF' > "$PKG_DIR/CONTROL/prerm"
-          #!/bin/sh
-          [ -n "$IPKG_INSTROOT" ] || {
-              /etc/init.d/xray-rust stop >/dev/null 2>&1
-              /etc/init.d/xray-rust disable >/dev/null 2>&1
-              exit 0
-          }
-          EOF
-          sed -i 's/^[ \t]*//' "$PKG_DIR/CONTROL/prerm"
+          printf "%s\n" \
+            "#!/bin/sh" \
+            '[ -n "$IPKG_INSTROOT" ] || {' \
+            '    /etc/init.d/xray-rust stop >/dev/null 2>&1' \
+            '    /etc/init.d/xray-rust disable >/dev/null 2>&1' \
+            '    exit 0' \
+            '}' \
+            > "$PKG_DIR/CONTROL/prerm"
           chmod +x "$PKG_DIR/CONTROL/prerm"
 
           # Build package
