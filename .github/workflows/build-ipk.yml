@@ -1,0 +1,115 @@
+name: Build and Release LiteWall IPK
+
+on:
+  push:
+    branches:
+      - main
+    tags:
+      - 'v*'
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    name: Build LiteWall IPK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Extract package version
+        id: pkg_info
+        run: |
+          VERSION=$(grep -E '^PKG_VERSION:=' Makefile | cut -d= -f2 | tr -d ' ')
+          RELEASE=$(grep -E '^PKG_RELEASE:=' Makefile | cut -d= -f2 | tr -d ' ')
+          PKG_NAME=$(grep -E '^PKG_NAME:=' Makefile | cut -d= -f2 | tr -d ' ')
+          FULL_VER="${VERSION}-${RELEASE}"
+          echo "pkg_name=${PKG_NAME}" >> $GITHUB_OUTPUT
+          echo "version=${VERSION}" >> $GITHUB_OUTPUT
+          echo "release=${RELEASE}" >> $GITHUB_OUTPUT
+          echo "full_ver=${FULL_VER}" >> $GITHUB_OUTPUT
+          echo "Building ${PKG_NAME} version ${FULL_VER}"
+
+      - name: Set up OpenWrt ipkg-build
+        run: |
+          wget -q https://raw.githubusercontent.com/openwrt/openwrt/main/scripts/ipkg-build -O ipkg-build
+          chmod +x ipkg-build
+
+      - name: Assemble IPK payload
+        run: |
+          PKG_DIR="ipk_stage"
+          rm -rf "$PKG_DIR"
+          mkdir -p "$PKG_DIR/CONTROL"
+          mkdir -p "$PKG_DIR/etc"
+          mkdir -p "$PKG_DIR/usr"
+          mkdir -p "$PKG_DIR/www"
+
+          # Copy filesystem assets
+          cp -r root/* "$PKG_DIR/"
+          cp -r htdocs/* "$PKG_DIR/www/"
+
+          # Ensure execute permissions on daemons and scripts
+          chmod +x "$PKG_DIR"/etc/init.d/*
+          chmod +x "$PKG_DIR"/etc/uci-defaults/*
+          chmod +x "$PKG_DIR"/usr/share/xray-rust/*.sh
+          chmod +x "$PKG_DIR"/usr/share/xray-rust/*.lua
+
+          # Control metadata file
+          cat << 'EOF' > "$PKG_DIR/CONTROL/control"
+          Package: ${{ steps.pkg_info.outputs.pkg_name }}
+          Version: ${{ steps.pkg_info.outputs.full_ver }}
+          Depends: luci-base, lua, luci-lib-jsonc, nftables, curl
+          Architecture: all
+          Maintainer: Dan
+          Section: luci
+          Priority: optional
+          Description: LuCI support for LiteWall (Xray-Rust transparent proxy client)
+          EOF
+          sed -i 's/^[ \t]*//' "$PKG_DIR/CONTROL/control"
+
+          # Post-installation hook
+          cat << 'EOF' > "$PKG_DIR/CONTROL/postinst"
+          #!/bin/sh
+          [ -n "$IPKG_INSTROOT" ] || {
+              ( . /etc/uci-defaults/luci-app-xray-rust ) && rm -f /etc/uci-defaults/luci-app-xray-rust
+              exit 0
+          }
+          EOF
+          sed -i 's/^[ \t]*//' "$PKG_DIR/CONTROL/postinst"
+          chmod +x "$PKG_DIR/CONTROL/postinst"
+
+          # Pre-removal hook
+          cat << 'EOF' > "$PKG_DIR/CONTROL/prerm"
+          #!/bin/sh
+          [ -n "$IPKG_INSTROOT" ] || {
+              /etc/init.d/xray-rust stop >/dev/null 2>&1
+              /etc/init.d/xray-rust disable >/dev/null 2>&1
+              exit 0
+          }
+          EOF
+          sed -i 's/^[ \t]*//' "$PKG_DIR/CONTROL/prerm"
+          chmod +x "$PKG_DIR/CONTROL/prerm"
+
+          # Build package
+          mkdir -p bin
+          ./ipkg-build -m "0:0" "$PKG_DIR" bin/
+          ls -la bin/
+
+      - name: Upload IPK Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ steps.pkg_info.outputs.pkg_name }}_${{ steps.pkg_info.outputs.full_ver }}_all
+          path: bin/*.ipk
+
+      - name: Publish to GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: bin/*.ipk
+          generate_release_notes: true
