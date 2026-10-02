@@ -98,5 +98,4 @@ config node 'node1'
 	option path '/api/1'
 	option mode 'stream-up'
 	option extra '{"xPaddingBytes":"100-1000"}'
-	option raw_link 'vless://00000000-0000-0000-0000-000000000000@example.com:443?encryption=none&security=tls&sni=example.com&fp=chrome&alpn=h2%2Chttp%2F1.1&type=xhttp&host=example.com&path=%2Fapi%2F1&mode=stream-up#Example-Node'
 

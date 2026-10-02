@@ -393,15 +393,48 @@ return view.extend({
 
 		var no;
 
-		// 1. Share link at top of modal (Priority & Auto-Fill)
-		no = s_node.option(form.TextValue, 'raw_link', _('VLESS Share Link (Priority / Auto-Fill)'));
+		// 1. Share link importer at top of modal (Button-based field importer)
+		no = s_node.option(form.DummyValue, '_import_link', _('Import VLESS Share Link'));
 		no.modalonly = true;
-		no.rows = 4;
-		no.placeholder = 'vless://uuid@host:port?type=xhttp&security=tls...';
-		no.description = _('Pasting a vless:// URL here automatically extracts and fills all node fields below. If kept filled in, this share link takes highest priority.');
+		no.rawhtml = true;
+		no.description = _('Paste a vless:// share link and click "Import / Fill Fields" to automatically populate the configuration options below.');
 		no.renderWidget = function(section_id, option_index, cfgvalue) {
-			var widget = form.TextValue.prototype.renderWidget.apply(this, [section_id, option_index, cfgvalue]);
-			var textarea = widget.querySelector ? (widget.querySelector('textarea') || widget) : widget;
+			var textarea = E('textarea', {
+				'class': 'cbi-input-textarea',
+				'rows': 3,
+				'style': 'width: 100%; font-family: monospace; font-size: 12px; margin-bottom: 8px;',
+				'placeholder': 'vless://uuid@host:port?type=xhttp&security=tls...'
+			});
+
+			var statusMsg = E('span', { 'style': 'margin-left: 12px; font-size: 12px; font-weight: bold;' }, '');
+
+			var btn = E('button', {
+				'type': 'button',
+				'class': 'btn cbi-button cbi-button-action',
+				'click': function(ev) {
+					ev.preventDefault();
+					var val = (textarea.value || '').trim();
+					if (!val) {
+						statusMsg.textContent = _('Please paste a VLESS link first.');
+						statusMsg.style.color = '#c44';
+						return;
+					}
+					var parsed = parseVlessUrl(val);
+					if (!parsed) {
+						statusMsg.textContent = _('Invalid or unsupported VLESS URL format.');
+						statusMsg.style.color = '#c44';
+						return;
+					}
+					handleAutoFill(val);
+					statusMsg.textContent = _('Configuration fields successfully populated!');
+					statusMsg.style.color = '#009a4c';
+				}
+			}, _('Import / Fill Fields'));
+
+			var container = E('div', { 'class': 'vless-import-box' }, [
+				textarea,
+				E('div', { 'style': 'display: flex; align-items: center;' }, [btn, statusMsg])
+			]);
 
 			function handleAutoFill(val) {
 				var parsed = parseVlessUrl(val);
@@ -411,7 +444,12 @@ return view.extend({
 					var el = document.getElementById('widget.cbid.xray-rust.' + section_id + '.' + name) ||
 					         document.getElementById('cbid.xray-rust.' + section_id + '.' + name);
 					if (el) {
-						el.value = v;
+						var inst = dom.findClassInstance(el);
+						if (inst && typeof inst.setValue === 'function') {
+							inst.setValue(v);
+						} else {
+							el.value = v;
+						}
 						el.dispatchEvent(new Event('input', { bubbles: true }));
 						el.dispatchEvent(new Event('change', { bubbles: true }));
 					}
@@ -429,8 +467,8 @@ return view.extend({
 				if (parsed.sid) setVal('sid', parsed.sid);
 				if (parsed.spx) setVal('spx', parsed.spx);
 				if (parsed.path) setVal('path', parsed.path);
-				if (parsed.xhttp_host) setVal('xhttp_host', parsed.xhttp_host);
-				if (parsed.xhttp_mode) setVal('xhttp_mode', parsed.xhttp_mode);
+				if (parsed.host) setVal('xhttp_host', parsed.host);
+				if (parsed.mode) setVal('xhttp_mode', parsed.mode);
 				if (parsed.extra) setVal('extra', parsed.extra);
 				if (parsed.flow) setVal('flow', parsed.flow);
 				if (parsed.encryption) setVal('encryption', parsed.encryption);
@@ -444,17 +482,12 @@ return view.extend({
 				if (parsed.quic_bbr_profile) setVal('quic_bbr_profile', parsed.quic_bbr_profile);
 				if (parsed.quic_brutal_up) setVal('quic_brutal_up', parsed.quic_brutal_up);
 				if (parsed.quic_brutal_down) setVal('quic_brutal_down', parsed.quic_brutal_down);
+				if (parsed.quic_udp_hop_ports) setVal('quic_udp_hop_ports', parsed.quic_udp_hop_ports);
+				if (parsed.quic_udp_hop_interval) setVal('quic_udp_hop_interval', parsed.quic_udp_hop_interval);
 				if (parsed.ws_early_data) setVal('ws_early_data', parsed.ws_early_data);
 			}
 
-			textarea.addEventListener('input', function() {
-				handleAutoFill(this.value);
-			});
-			textarea.addEventListener('change', function() {
-				handleAutoFill(this.value);
-			});
-
-			return widget;
+			return container;
 		};
 
 		no = s_node.option(form.Value, 'remark', _('Remark / Name'));

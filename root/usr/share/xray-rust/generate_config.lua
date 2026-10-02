@@ -117,47 +117,13 @@ end
 local function get_node_data(node_id, socks_port)
     local node_sec = uci:get_all("xray-rust", node_id)
     if not node_sec then return nil end
-    if node_sec.raw_link and node_sec.raw_link ~= "" then
+
+    -- Fallback for legacy bare nodes that only have raw_link and no server field
+    if (not node_sec.server or node_sec.server == "") and node_sec.raw_link and node_sec.raw_link ~= "" then
         local data = parse_vless(node_sec.raw_link, socks_port)
-        if data then
-            if data.stream_settings and data.stream_settings.tlsSettings then
-                if node_sec.cipher_suites and node_sec.cipher_suites ~= "" then
-                    data.stream_settings.tlsSettings.cipherSuites = node_sec.cipher_suites
-                end
-                if node_sec.pinned_peer_cert and node_sec.pinned_peer_cert ~= "" then
-                    data.stream_settings.tlsSettings.pinnedPeerCertSha256 = node_sec.pinned_peer_cert
-                end
-                if node_sec.verify_peer_cert and node_sec.verify_peer_cert ~= "" then
-                    data.stream_settings.tlsSettings.verifyPeerCertByName = node_sec.verify_peer_cert
-                end
-                if node_sec.sni and node_sec.sni ~= "" then
-                    data.stream_settings.tlsSettings.serverName = node_sec.sni
-                end
-                if node_sec.fp and node_sec.fp ~= "" then
-                    data.stream_settings.tlsSettings.fingerprint = node_sec.fp
-                end
-            end
-            if node_sec.server and node_sec.server ~= "" then
-                data.address = node_sec.server
-            end
-            if node_sec.port and tonumber(node_sec.port) then
-                data.port = tonumber(node_sec.port)
-            end
-            if node_sec.uuid and node_sec.uuid ~= "" then
-                data.uuid = node_sec.uuid
-            end
-            if node_sec.flow and node_sec.flow ~= "" then
-                data.flow = node_sec.flow
-            end
-            if node_sec.finalmask and node_sec.finalmask ~= "" then
-                local fm_obj = json.parse(node_sec.finalmask)
-                if fm_obj then
-                    data.stream_settings.finalmask = fm_obj
-                end
-            end
-            return data
-        end
+        if data then return data end
     end
+
     local server = node_sec.server
         local port = tonumber(node_sec.port) or 443
         local uuid = node_sec.uuid
