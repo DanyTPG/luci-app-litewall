@@ -590,6 +590,7 @@ return view.extend({
 		no.value('android', 'Android');
 		no.value('random', 'Random');
 		no.value('randomized', 'Randomized');
+		no.value('unsafe', 'Unsafe (No uTLS)');
 		no.default = 'chrome';
 		no.depends('security', 'tls');
 		no.depends('security', 'reality');
