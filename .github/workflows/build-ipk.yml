@@ -2,14 +2,8 @@ name: Build and Release LiteWall IPK
 
 on:
   push:
-    branches:
-      - main
     tags:
-      - 'v*'
-  pull_request:
-    branches:
-      - main
-  workflow_dispatch:
+      - '*'
 
 permissions:
   contents: write
@@ -115,9 +109,8 @@ jobs:
           path: bin/*.ipk
 
       - name: Publish to GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
         uses: softprops/action-gh-release@v2
         with:
-          tag_name: v${{ steps.pkg_info.outputs.version }}
+          tag_name: ${{ github.ref_name }}
           files: bin/*.ipk
           generate_release_notes: true
