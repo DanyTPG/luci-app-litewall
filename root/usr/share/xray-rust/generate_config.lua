@@ -55,8 +55,8 @@ local function parse_vless(url, socks_port)
         if params["verifyPeerCertByName"] then
             stream_settings.tlsSettings.verifyPeerCertByName = params["verifyPeerCertByName"]
         end
-        if params["cipherSuites"] and params["cipherSuites"] ~= "" then
-            stream_settings.tlsSettings.cipherSuites = params["cipherSuites"]
+        if (params["cs"] and params["cs"] ~= "") or (params["cipherSuites"] and params["cipherSuites"] ~= "") then
+            stream_settings.tlsSettings.cipherSuites = params["cs"] or params["cipherSuites"]
         end
         if params["allowInsecure"] == "1" or params["allowInsecure"] == "true" then
             stream_settings.tlsSettings.allowInsecure = true
@@ -69,6 +69,14 @@ local function parse_vless(url, socks_port)
             shortId = params["sid"] or "",
             spiderX = params["spx"] or ""
         }
+    end
+
+    local fm_raw = params["fm"] or params["finalmask"]
+    if fm_raw and fm_raw ~= "" then
+        local fm_obj = json.parse(fm_raw)
+        if fm_obj then
+            stream_settings.finalmask = fm_obj
+        end
     end
     
     if stream_settings.network == "xhttp" or stream_settings.network == "splithttp" then
@@ -140,6 +148,12 @@ local function get_node_data(node_id, socks_port)
             end
             if node_sec.flow and node_sec.flow ~= "" then
                 data.flow = node_sec.flow
+            end
+            if node_sec.finalmask and node_sec.finalmask ~= "" then
+                local fm_obj = json.parse(node_sec.finalmask)
+                if fm_obj then
+                    data.stream_settings.finalmask = fm_obj
+                end
             end
             return data
         end
@@ -304,6 +318,13 @@ local function get_node_data(node_id, socks_port)
                 grpc_settings.initial_windows_size = tonumber(node_sec.grpc_initial_windows_size)
             end
             stream_settings.grpcSettings = grpc_settings
+        end
+
+        if node_sec.finalmask and node_sec.finalmask ~= "" then
+            local fm_obj = json.parse(node_sec.finalmask)
+            if fm_obj then
+                stream_settings.finalmask = fm_obj
+            end
         end
 
         local proxy_node = node_sec.proxy_node
