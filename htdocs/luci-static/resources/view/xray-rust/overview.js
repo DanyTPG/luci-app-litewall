@@ -317,6 +317,18 @@ return view.extend({
 		o.optional = true;
 
 		// --- Memory & Performance Tuning Tab ---
+		o = s.taboption('tuning', form.Value, 'worker_threads', _('Worker Threads (CPU Cores)'));
+		o.datatype = 'uinteger';
+		o.placeholder = _('Auto (Total Cores - 1)');
+		o.value('', _('Auto (Total Cores - 1)'));
+		o.value('1', '1');
+		o.value('2', '2');
+		o.value('3', '3');
+		o.value('4', '4');
+		o.value('6', '6');
+		o.value('8', '8');
+		o.description = _('Number of worker threads dedicated to network crypto and proxying. Default is total available CPU cores minus 1 (keeping 1 core for system routing and Wi-Fi).');
+
 		o = s.taboption('tuning', form.ListValue, 'h2_window', _('HTTP/2 Stream Receive Window'));
 		o.value('131072', '128 KiB (Ultra Low Memory)');
 		o.value('262144', '256 KiB (Recommended for 128/256 MB RAM)');

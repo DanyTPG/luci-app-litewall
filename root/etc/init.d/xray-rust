@@ -94,10 +94,19 @@ EOF
 	procd_open_instance "xray-rust"
 	procd_set_param command "$PROG" run -config "$CONF_FILE"
 
+	local worker_threads
+	config_get worker_threads main worker_threads ""
+
 	if [ "$mode" = "redirect" ]; then
 		local redir_idle
 		config_get redir_idle main redir_idle "60"
-		procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335" XRAY_REDIR_IDLE_TIMEOUT="$redir_idle"
+		if [ -n "$worker_threads" ]; then
+			procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335" XRAY_REDIR_IDLE_TIMEOUT="$redir_idle" TOKIO_WORKER_THREADS="$worker_threads"
+		else
+			procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335" XRAY_REDIR_IDLE_TIMEOUT="$redir_idle"
+		fi
+	elif [ -n "$worker_threads" ]; then
+		procd_set_param env TOKIO_WORKER_THREADS="$worker_threads"
 	fi
 
 	procd_set_param stdout 1
