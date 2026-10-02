@@ -289,6 +289,18 @@ return view.extend({
 		o.default = '1';
 		o.depends('mode', 'redirect');
 
+		o = s.taboption('basic', form.Value, 'domestic_dns', _('Domestic DNS Server (Direct)'));
+		o.description = _('Direct DNS server for domestic (.ir) and direct domains. Never routed through proxy (survives proxy node downtime).');
+		o.placeholder = '192.168.100.1';
+		o.datatype = 'host(0)';
+		o.default = '192.168.100.1';
+
+		o = s.taboption('basic', form.Value, 'remote_dns', _('Remote Clean DNS Server (Proxy)'));
+		o.description = _('Clean DNS server for proxy rules and blocked domains, routed through the active proxy node.');
+		o.placeholder = '8.8.8.8';
+		o.datatype = 'host(0)';
+		o.default = '8.8.8.8';
+
 		o = s.taboption('basic', form.Flag, 'block_quic', _('Block QUIC (UDP 443)'));
 		o.description = _('Reject UDP port 443 to force Android apps (YouTube, Twitter) and browsers to fall back to TCP and route through proxy. Does not affect gaming or other UDP ports.');
 		o.default = '1';

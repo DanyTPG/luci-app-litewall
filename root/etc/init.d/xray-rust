@@ -66,16 +66,25 @@ start_service() {
 		/usr/share/xray-rust/nftables.sh start "$redir_port" "$proxy_router" "$hijack_dns" "$block_quic" "$bypass_iran_firewall"
 		
 		# Configure dnsmasq to forward non-domestic queries to clean DNS
-		local upstream_dns=$(uci -q get dhcp.@dnsmasq[0].server | awk '{print $1}')
-		[ -z "$upstream_dns" ] && upstream_dns="192.168.100.1"
+		local domestic_dns
+		config_get domestic_dns main domestic_dns ""
+		if [ -z "$domestic_dns" ]; then
+			domestic_dns=$(uci -q get dhcp.@dnsmasq[0].server | awk '{print $1}')
+			[ -z "$domestic_dns" ] && domestic_dns="192.168.100.1"
+		fi
+
+		local remote_dns
+		config_get remote_dns main remote_dns "8.8.8.8"
+		[ -z "$remote_dns" ] && remote_dns="8.8.8.8"
+
 		for d in /tmp/dnsmasq.*.d; do
 			if [ -d "$d" ]; then
 				cat <<EOF > "$d/xray-rust.conf"
-server=/ir/$upstream_dns
+server=/ir/$domestic_dns
 EOF
 				if [ -f /var/etc/xray-rust/node_domains ]; then
 					for dom in $(cat /var/etc/xray-rust/node_domains); do
-						echo "server=/$dom/$upstream_dns" >> "$d/xray-rust.conf"
+						echo "server=/$dom/$domestic_dns" >> "$d/xray-rust.conf"
 					done
 				fi
 				cat <<EOF >> "$d/xray-rust.conf"
@@ -100,11 +109,9 @@ EOF
 	if [ "$mode" = "redirect" ]; then
 		local redir_idle
 		config_get redir_idle main redir_idle "60"
-		if [ -n "$worker_threads" ]; then
-			procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335" XRAY_REDIR_IDLE_TIMEOUT="$redir_idle" TOKIO_WORKER_THREADS="$worker_threads"
-		else
-			procd_set_param env XRAY_REDIR_PORT="$redir_port" XRAY_DNS_PORT="5335" XRAY_REDIR_IDLE_TIMEOUT="$redir_idle"
-		fi
+		local env_args="XRAY_REDIR_PORT=$redir_port XRAY_DNS_PORT=5335 XRAY_REDIR_IDLE_TIMEOUT=$redir_idle XRAY_DOMESTIC_DNS=$domestic_dns:53 XRAY_REMOTE_DNS=$remote_dns:53"
+		[ -n "$worker_threads" ] && env_args="$env_args TOKIO_WORKER_THREADS=$worker_threads"
+		procd_set_param env $env_args
 	elif [ -n "$worker_threads" ]; then
 		procd_set_param env TOKIO_WORKER_THREADS="$worker_threads"
 	fi
