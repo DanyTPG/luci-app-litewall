@@ -128,6 +128,7 @@ function parseVlessUrl(url) {
 			grpc_authority: params.authority || '',
 			pinned_peer_cert: params.pinnedPeerCertSha256 || '',
 			verify_peer_cert: params.verifyPeerCertByName || '',
+			cipher_suites: params.cipherSuites || params.ciphers || '',
 			quic_congestion: params.congestion || '',
 			quic_bbr_profile: params.bbrProfile || '',
 			quic_brutal_up: params.brutalUp || '',
@@ -436,6 +437,7 @@ return view.extend({
 				if (parsed.grpc_authority) setVal('grpc_authority', parsed.grpc_authority);
 				if (parsed.pinned_peer_cert) setVal('pinned_peer_cert', parsed.pinned_peer_cert);
 				if (parsed.verify_peer_cert) setVal('verify_peer_cert', parsed.verify_peer_cert);
+				if (parsed.cipher_suites) setVal('cipher_suites', parsed.cipher_suites);
 				if (parsed.quic_congestion) setVal('quic_congestion', parsed.quic_congestion);
 				if (parsed.quic_bbr_profile) setVal('quic_bbr_profile', parsed.quic_bbr_profile);
 				if (parsed.quic_brutal_up) setVal('quic_brutal_up', parsed.quic_brutal_up);
@@ -607,6 +609,12 @@ return view.extend({
 		no.modalonly = true;
 		no.placeholder = 'example.com';
 		no.description = _('Alternative certificate verification names (SAN list).');
+		no.depends('security', 'tls');
+
+		no = s_node.option(form.Value, 'cipher_suites', _('Cipher Suites'));
+		no.modalonly = true;
+		no.placeholder = 'TLS_CHACHA20_POLY1305_SHA256:TLS_AES_128_GCM_SHA256';
+		no.description = _('Colon-separated list of supported TLS cipher suites (e.g. TLS_CHACHA20_POLY1305_SHA256).');
 		no.depends('security', 'tls');
 
 		no = s_node.option(form.Value, 'pbk', _('REALITY Public Key'));

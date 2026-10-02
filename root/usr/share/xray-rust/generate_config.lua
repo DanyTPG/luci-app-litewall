@@ -55,6 +55,9 @@ local function parse_vless(url, socks_port)
         if params["verifyPeerCertByName"] then
             stream_settings.tlsSettings.verifyPeerCertByName = params["verifyPeerCertByName"]
         end
+        if params["cipherSuites"] and params["cipherSuites"] ~= "" then
+            stream_settings.tlsSettings.cipherSuites = params["cipherSuites"]
+        end
         if params["allowInsecure"] == "1" or params["allowInsecure"] == "true" then
             stream_settings.tlsSettings.allowInsecure = true
         end
@@ -145,6 +148,9 @@ local function get_node_data(node_id, socks_port)
             end
             if node_sec.verify_peer_cert and node_sec.verify_peer_cert ~= "" then
                 tls_settings.verifyPeerCertByName = node_sec.verify_peer_cert
+            end
+            if node_sec.cipher_suites and node_sec.cipher_suites ~= "" then
+                tls_settings.cipherSuites = node_sec.cipher_suites
             end
             stream_settings.tlsSettings = tls_settings
         elseif security == "reality" then
