@@ -119,17 +119,90 @@ EOF
 	procd_set_param stdout 1
 	procd_set_param stderr 1
 	procd_close_instance
+	get_runtime_fp > "$CONF_DIR/runtime_fp"
 	logger -t xray-rust "Service started (mode: $mode)"
+}
+
+get_runtime_fp() {
+	local enabled mode redir_port socks_port proxy_router hijack_dns block_quic bypass_iran_firewall domestic_dns remote_dns worker_threads redir_idle
+	config_load xray-rust
+	config_get enabled main enabled "0"
+	config_get mode main mode "redirect"
+	config_get redir_port main redir_port "1081"
+	config_get socks_port main socks_port "10808"
+	config_get proxy_router main proxy_router "0"
+	config_get hijack_dns main hijack_dns "1"
+	config_get block_quic main block_quic "1"
+	config_get bypass_iran_firewall main bypass_iran_firewall "1"
+	config_get domestic_dns main domestic_dns "192.168.100.1"
+	config_get remote_dns main remote_dns "8.8.8.8"
+	config_get worker_threads main worker_threads ""
+	config_get redir_idle main redir_idle "60"
+	echo "${enabled}:${mode}:${redir_port}:${socks_port}:${proxy_router}:${hijack_dns}:${block_quic}:${bypass_iran_firewall}:${domestic_dns}:${remote_dns}:${worker_threads}:${redir_idle}"
 }
 
 stop_service() {
         /usr/share/xray-rust/nftables.sh stop >/dev/null 2>&1
         rm -f /tmp/dnsmasq.*.d/xray-rust.conf 2>/dev/null
+        rm -f "$CONF_DIR/runtime_fp" 2>/dev/null
         /etc/init.d/dnsmasq restart >/dev/null 2>&1
         logger -t xray-rust "Service stopped"
 }
 
 reload_service() {
+	config_load xray-rust
+	local enabled
+	config_get enabled main enabled "0"
+	if [ "$enabled" != "1" ]; then
+		stop
+		return 0
+	fi
+
+	# If service is not currently running, start it
+	if ! pgrep -f "$PROG run" >/dev/null; then
+		start
+		return 0
+	fi
+
+	local check_dir="/tmp/xray-rust-check"
+	rm -rf "$check_dir"
+	mkdir -p "$check_dir"
+
+	lua "$GEN_SCRIPT" "$check_dir/config.json" >/dev/null 2>&1
+	if [ $? -ne 0 ]; then
+		logger -t xray-rust "Failed to generate configuration during reload"
+		rm -rf "$check_dir"
+		return 1
+	fi
+
+	# Check if core config or runtime settings changed
+	local changed=0
+	if [ ! -f "$CONF_FILE" ] || ! cmp -s "$check_dir/config.json" "$CONF_FILE"; then
+		changed=1
+	elif [ -f "$check_dir/server_ips" ] && [ -f "$CONF_DIR/server_ips" ] && ! cmp -s "$check_dir/server_ips" "$CONF_DIR/server_ips"; then
+		changed=1
+	elif [ -f "$check_dir/node_domains" ] && [ -f "$CONF_DIR/node_domains" ] && ! cmp -s "$check_dir/node_domains" "$CONF_DIR/node_domains"; then
+		changed=1
+	elif [ -f "$check_dir/lan_bypass" ] && [ -f "$CONF_DIR/lan_bypass" ] && ! cmp -s "$check_dir/lan_bypass" "$CONF_DIR/lan_bypass"; then
+		changed=1
+	fi
+
+	local cur_fp
+	local new_fp
+	[ -f "$CONF_DIR/runtime_fp" ] && cur_fp=$(cat "$CONF_DIR/runtime_fp")
+	new_fp=$(get_runtime_fp)
+	if [ "$cur_fp" != "$new_fp" ]; then
+		changed=1
+	fi
+
+	if [ "$changed" -eq 0 ]; then
+		logger -t xray-rust "Active configuration unchanged (inactive nodes/rules edited), skipping daemon restart"
+		rm -rf "$check_dir"
+		return 0
+	fi
+
+	rm -rf "$check_dir"
+	logger -t xray-rust "Active configuration changed, reloading service"
 	stop
 	start
 }

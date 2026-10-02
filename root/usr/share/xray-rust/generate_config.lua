@@ -348,7 +348,7 @@ end
 local socks_port = tonumber(arg[3]) or tonumber(uci:get("xray-rust", "main", "socks_port")) or 10808
 local out_file = arg[1] or "/var/etc/xray-rust/config.json"
 local single_node_id = arg[2]
-local conf_dir = "/var/etc/xray-rust"
+local conf_dir = out_file:match("^(.+)/[^/]+$") or "/var/etc/xray-rust"
 
 os.execute("mkdir -p " .. conf_dir)
 
